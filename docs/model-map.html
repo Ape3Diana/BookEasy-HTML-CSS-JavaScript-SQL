@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BookEasy — model & API map</title>
+<style>
+  :root {
+    --accent:#2E6E5E; --accent-soft:#E3EEEA;
+    --bg:#F7F5F1; --surface:#FFFFFF; --line:#E2DED6;
+    --ink:#26231E; --ink-soft:#6B655C;
+    --ok:#2E7D32; --ok-bg:#E6F2E7;
+    --warn:#9A6700; --warn-bg:#FBF0DA;
+    --bad:#B3261E; --bad-bg:#F9E5E4;
+    --done:#4A5568; --done-bg:#E8ECF1;
+    --radius:10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent:#6FB8A4; --accent-soft:#22352F;
+      --bg:#17191B; --surface:#1F2225; --line:#33373B;
+      --ink:#EAE7E1; --ink-soft:#A09A90;
+      --ok:#7BC47F; --ok-bg:#20321F;
+      --warn:#E0A83F; --warn-bg:#3A2E14;
+      --bad:#F2867E; --bad-bg:#3D1F1D;
+      --done:#A7B4C4; --done-bg:#272E38;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:1100px; margin-inline:auto; padding:32px 20px 80px; }
+  h1 { font:600 26px/1.2 Georgia,serif; margin:0 0 4px; }
+  h2 { font:600 20px/1.2 Georgia,serif; margin:44px 0 6px; padding-top:16px; border-top:1px solid var(--line); }
+  h3 { font:600 15px/1.3 system-ui,sans-serif; margin:24px 0 8px; }
+  p.lede { color:var(--ink-soft); margin:0 0 8px; max-width:75ch; }
+  p { max-width:80ch; }
+  code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.9em;
+         background:var(--accent-soft); padding:1px 5px; border-radius:4px; }
+  .scroll { overflow-x:auto; border:1px solid var(--line); border-radius:var(--radius); margin:12px 0; }
+  table { border-collapse:collapse; width:100%; min-width:640px; background:var(--surface); }
+  th { text-align:left; font-size:11.5px; letter-spacing:.7px; text-transform:uppercase;
+       color:var(--ink-soft); background:var(--bg); padding:9px 12px; border-bottom:1px solid var(--line); }
+  td { padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top; font-size:14px; }
+  tr:last-child td { border-bottom:0; }
+  .tag { display:inline-block; border-radius:999px; padding:1px 9px; font-size:11.5px; font-weight:600; white-space:nowrap; }
+  .t-ok{background:var(--ok-bg);color:var(--ok)} .t-warn{background:var(--warn-bg);color:var(--warn)}
+  .t-bad{background:var(--bad-bg);color:var(--bad)} .t-done{background:var(--done-bg);color:var(--done)}
+  .note { background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--accent);
+          border-radius:var(--radius); padding:12px 16px; margin:14px 0; }
+  .note strong { color:var(--accent); }
+  ol li, ul li { margin:4px 0; max-width:80ch; }
+  .col2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; }
+  .card h3 { margin-top:0; }
+  .muted { color:var(--ink-soft); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>BookEasy — model &amp; API map</h1>
+<p class="lede">What the mock holds, which function answers which endpoint, and what is still missing.
+Current as of the employees + price-snapshot change. Update this when the model changes.</p>
+
+<h2>1. Tables</h2>
+<p class="lede">Six tables in the mock, plus one designed but not modelled yet.</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th>Table</th><th>Columns</th><th>Notes</th></tr></thead>
+<tbody>
+<tr>
+  <td><code>users</code></td>
+  <td>id · email · password · fullName · role · createdAt</td>
+  <td><code>role</code> is <code>client</code> or <code>admin</code>. Email unique. Password becomes a bcrypt hash in 2.3 and never leaves the server.</td>
+</tr>
+<tr>
+  <td><code>services</code></td>
+  <td>id · name · description · durationMin · price · isActive · createdAt</td>
+  <td>Soft delete via <code>isActive</code>. Duration 15–240 and a multiple of 15; price ≥ 0.</td>
+</tr>
+<tr>
+  <td><code>employees</code></td>
+  <td>id · fullName · isActive · createdAt</td>
+  <td><span class="tag t-ok">new</span> Inactive = left the salon; never offered, but kept so old bookings still resolve a name.</td>
+</tr>
+<tr>
+  <td><code>employeeServices</code></td>
+  <td>employeeId · serviceId</td>
+  <td><span class="tag t-ok">new</span> Link table, many-to-many. Composite PK in SQL. A service exists once; several people can perform it.</td>
+</tr>
+<tr>
+  <td><code>workingHours</code></td>
+  <td>id · weekday · opensAt · closesAt</td>
+  <td>Salon-wide; everyone works these. <code>opensAt = null</code> means closed. Bounds the slot grid, nothing else.</td>
+</tr>
+<tr>
+  <td><code>bookings</code></td>
+  <td>id · userId · serviceId · <b>employeeId</b> · <b>price</b> · startsAt · endsAt · status · createdAt · cancelledAt</td>
+  <td><code>price</code> is a <b>snapshot</b> written at creation, never recomputed. <code>status</code> ∈ pending, confirmed, completed, cancelled.</td>
+</tr>
+<tr>
+  <td><code>booking_slots</code></td>
+  <td>bookingId · slotStartsAt</td>
+  <td><span class="tag t-done">Partea 2</span> Not in the mock by design. <b>Its unique key must become <code>(employee_id, slot_starts_at)</code></b> — see the open questions.</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h3>Fields that are not columns</h3>
+<p>Every booking also carries <code>serviceName</code>, <code>employeeName</code>, <code>userFullName</code> and
+<code>userEmail</code>. These are <b>JOIN results</b>, not stored data — the API sends them glued on so a page
+never has to look across tables. <code>price</code> looks similar but is the opposite: a real column, frozen at
+sale time, so changing the price list cannot rewrite past revenue.</p>
+
+<h2>2. Endpoints → functions</h2>
+<p class="lede">Every endpoint in Anexa B, plus four additions (marked <span class="tag t-warn">added</span>). <span class="tag t-ok">ok</span> means the mock
+returns the shape the API will return.</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th>Endpoint</th><th>Auth</th><th>Function</th><th>What it does</th><th></th></tr></thead>
+<tbody>
+<tr><td colspan="5" style="background:var(--bg);font-weight:600">Auth</td></tr>
+<tr><td><code>POST /api/auth/register</code></td><td>—</td><td><code>addUser({fullName,email,password})</code></td>
+    <td>Creates a client, logs them in, returns the user without the password. Throws <code>EMAIL_TAKEN</code> 409.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>POST /api/auth/login</code></td><td>—</td><td><code>login(email, password)</code></td>
+    <td>Sets the session, returns the user. Throws <code>INVALID_CREDENTIALS</code> 401 — same error for a wrong email and a wrong password.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>POST /api/auth/logout</code></td><td>C/A</td><td><code>logout()</code></td>
+    <td>Clears the session.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>GET /api/auth/me</code></td><td>C/A</td><td><code>getCurrentUser()</code></td>
+    <td>Current user or <code>null</code>. Never includes the password. <b>api.js must translate 401 → null for this one endpoint</b> — being logged out is a normal answer, not an error.</td><td><span class="tag t-ok">ok</span></td></tr>
+
+<tr><td colspan="5" style="background:var(--bg);font-weight:600">Services</td></tr>
+<tr><td><code>GET /api/services</code></td><td>—</td><td><code>getActiveServices()</code></td>
+    <td>Active services, sorted by name.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>GET /api/services/:id</code> <span class="tag t-warn">added</span></td><td>—</td><td><code>getServiceById(id)</code></td>
+    <td>One service. Throws <code>NOT_FOUND</code> 404.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>GET /api/admin/services</code> <span class="tag t-warn">added</span></td><td>A</td><td><code>getAllServices()</code></td>
+    <td>All services including inactive — the admin table needs them to reactivate.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>POST /api/services</code></td><td>A</td><td><code>addService(data)</code></td>
+    <td>Creates a service; coerces price and duration to numbers.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>PUT /api/services/:id</code></td><td>A</td><td><code>updateService(id, data)</code></td>
+    <td>Edits; also how a service is reactivated. Throws <code>NOT_FOUND</code> 404.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>DELETE /api/services/:id</code></td><td>A</td><td><code>deactivateService(id)</code></td>
+    <td>Soft delete. Returns nothing — 204 No Content. Reactivating is <code>updateService(id, {isActive: true})</code>, a PUT.</td><td><span class="tag t-ok">ok</span></td></tr>
+
+<tr><td colspan="5" style="background:var(--bg);font-weight:600">Employees</td></tr>
+<tr><td><code>GET /api/employees</code> <span class="tag t-warn">added</span></td><td>—</td><td><code>getActiveEmployees()</code></td>
+    <td>Active employees, sorted by name. Fills the admin filter dropdown.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>GET /api/services/:id/employees</code> <span class="tag t-warn">added</span></td><td>—</td><td><code>getEmployeesForService(id)</code></td>
+    <td>Who can perform this service — the picker in 1.3. Excludes inactive employees; 404 for a service that is unknown <em>or withdrawn</em>.</td><td><span class="tag t-ok">ok</span></td></tr>
+
+<tr><td colspan="5" style="background:var(--bg);font-weight:600">Availability &amp; bookings</td></tr>
+<tr><td><code>GET /api/availability?serviceId=&amp;employeeId=&amp;date=</code></td><td>—</td><td class="muted">not written</td>
+    <td>The pure slot calculation of Pasul 1.3. Will consume <code>getWorkingHoursFor</code> + <code>getActiveBookingsForDay</code>.</td><td><span class="tag t-bad">missing</span></td></tr>
+<tr><td><code>POST /api/bookings</code></td><td>C</td><td><code>addBooking({userId,serviceId,employeeId,startsAt})</code></td>
+    <td>Creates a booking, snapshots the price. Throws <code>TOO_SOON</code>/<code>TOO_FAR</code>/<code>TOO_MANY_BOOKINGS</code> 422, <code>EMPLOYEE_CANNOT_PERFORM</code> 422, <code>SLOT_TAKEN</code> 409.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>GET /api/bookings/my?page=</code></td><td>C</td><td><code>getBookingsForUser(userId, page, pageSize)</code></td>
+    <td>Returns <code>{items, total, page, pageSize}</code>, newest first.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>DELETE /api/bookings/:id</code></td><td>C</td><td><code>cancelBooking(id)</code></td>
+    <td>Sets <code>cancelled</code> + <code>cancelledAt</code>. Returns nothing — 204 No Content, so the page re-fetches. Throws <code>NOT_FOUND</code> 404.</td><td><span class="tag t-ok">ok</span></td></tr>
+
+<tr><td colspan="5" style="background:var(--bg);font-weight:600">Admin</td></tr>
+<tr><td><code>GET /api/admin/bookings?date=&amp;status=&amp;employeeId=</code></td><td>A</td><td><code>getBookingsForDay(dateKey, {status, employeeId})</code></td>
+    <td>The day agenda, chronological. Defaults to today / all / all. Empty string = all.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>PATCH /api/admin/bookings/:id/status</code></td><td>A</td><td><code>setBookingStatus(id, status)</code></td>
+    <td>Applies RB-06. Throws <code>INVALID_TRANSITION</code> 422, <code>NOT_FOUND</code> 404.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>GET /api/admin/working-hours</code></td><td>A</td><td><code>getAllWorkingHours()</code></td>
+    <td>All seven days, sorted.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>PUT /api/admin/working-hours</code></td><td>A</td><td><code>updateWorkingHours(week)</code></td>
+    <td>Replaces the whole week.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>GET /api/admin/stats?from=&amp;to=</code></td><td>A</td><td><code>getStats(from, to)</code></td>
+    <td>One object: <code>{revenue, bookings, byStatus, topServices, from, to}</code>. Revenue is <code>completed</code> only, summing the price snapshot — so realised, never a forecast. <code>bookings</code> excludes cancelled. Defaults to today.</td><td><span class="tag t-ok">ok</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>3. Internal helpers — no endpoint, and that is correct</h2>
+<p class="lede">These are the parts of the mock playing <b>server</b>, not <b>API</b>. In Partea 3 they do not
+become <code>fetch</code> calls — they disappear from the frontend entirely.</p>
+<div class="col2">
+  <div class="card"><h3><code>getUserById</code> / <code>getUserByEmail</code></h3>
+    <p class="muted">Steps inside login and register. Not exported — their rows still carry the password.</p></div>
+  <div class="card"><h3><code>getEmployeeById</code> / <code>employeeCanDoService</code></h3>
+    <p class="muted">Used by <code>addBooking</code> and the slot grid. Return <code>null</code> / a boolean, never throw.</p></div>
+  <div class="card"><h3><code>getWorkingHoursFor(weekday)</code></h3>
+    <p class="muted">Only the slot calculation needs it, and that moves to the server in 2.5.</p></div>
+  <div class="card"><h3><code>getActiveBookingsForDay</code></h3>
+    <p class="muted">Feeds the slot calculation. Throws if the employee id is missing, rather than silently meaning "everyone".</p></div>
+  <div class="card"><h3><code>countActiveFutureBookings</code></h3>
+    <p class="muted">RB-07, checked before the insert; becomes a 422 on the server.</p></div>
+  <div class="card"><h3><code>clone</code> / <code>cloneAll</code> / <code>nextId</code> / <code>dayAt</code></h3>
+    <p class="muted">Plumbing. <code>dayAt</code> is replaced by <code>seed.sql</code> in Partea 2.</p></div>
+  <div class="card"><h3><code>setCurrentUserId</code> / <code>readStoredUserId</code></h3>
+    <p class="muted">The session, kept in <code>localStorage</code> <em>inside</em> the module so it survives
+    navigation and no page touches storage. Dies entirely in Partea 3 — the cookie is httpOnly.</p></div>
+</div>
+
+<h2>4. Error codes</h2>
+<p class="lede">Branch on <code>err.code</code>, never on the message. Partea 2 must emit these exact strings.</p>
+<div class="scroll">
+<table>
+<thead><tr><th>Code</th><th>HTTP</th><th>Raised by</th></tr></thead>
+<tbody>
+<tr><td><code>INVALID_CREDENTIALS</code></td><td>401</td><td><code>login</code></td></tr>
+<tr><td><code>UNAUTHENTICATED</code></td><td>401</td><td><code>addBooking</code> without a session</td></tr>
+<tr><td><code>NOT_FOUND</code></td><td>404</td><td><code>getServiceById</code>, <code>updateService</code>, <code>deactivateService</code>, <code>cancelBooking</code>, <code>setBookingStatus</code>, <code>addBooking</code> (unknown/inactive employee)</td></tr>
+<tr><td><code>EMAIL_TAKEN</code></td><td>409</td><td><code>addUser</code></td></tr>
+<tr><td><code>SLOT_TAKEN</code></td><td>409</td><td><code>addBooking</code> — the interval collides for that employee</td></tr>
+<tr><td><code>TOO_SOON</code> / <code>TOO_FAR</code></td><td>422</td><td><code>addBooking</code> — RB-03</td></tr>
+<tr><td><code>TOO_MANY_BOOKINGS</code></td><td>422</td><td><code>addBooking</code> — RB-07</td></tr>
+<tr><td><code>EMPLOYEE_CANNOT_PERFORM</code></td><td>422</td><td><code>addBooking</code> — the pair is not in <code>employeeServices</code></td></tr>
+<tr><td><code>INVALID_TRANSITION</code></td><td>422</td><td><code>setBookingStatus</code> — RB-06</td></tr>
+<tr><td><code>INVALID_DATE</code></td><td>422</td><td><code>addBooking</code> — <code>startsAt</code> is not a parseable instant</td></tr>
+<tr><td><code>INVALID_SLOT_START</code></td><td>422</td><td><code>addBooking</code> — RB-01, not on a 15-minute boundary</td></tr>
+<tr><td><code>SALON_CLOSED</code></td><td>422</td><td><code>addBooking</code> — that weekday has no opening hours</td></tr>
+<tr><td><code>OUTSIDE_WORKING_HOURS</code></td><td>422</td><td><code>addBooking</code> — RB-02, the service does not fit in the day</td></tr>
+<tr><td><code>INVALID_SERVICE</code></td><td>422</td><td><code>addService</code>, <code>updateService</code> — duration/price/required fields</td></tr>
+<tr><td><code>INVALID_HOURS</code></td><td>422</td><td><code>updateWorkingHours</code> — closing not after opening</td></tr>
+</tbody>
+</table>
+</div>
+
+<p><b>Not an <code>ApiError</code>:</b> <code>getActiveBookingsForDay</code> throws a plain
+<code>Error</code> when the employee id is missing. No endpoint maps to it, so it is a programming
+mistake rather than something a client could cause — an <code>ApiError</code> would wrongly imply
+the server might return it.</p>
+
+<h2>4b. Module layout</h2>
+<div class="scroll">
+<table>
+<thead><tr><th>File</th><th>Holds</th><th>Imports</th><th>Fate</th></tr></thead>
+<tbody>
+<tr><td><code>date-utils.js</code></td><td>instant ↔ local day conversions</td><td>nothing</td>
+    <td>stays in the frontend, copied to the server</td></tr>
+<tr><td><code>rules.js</code></td><td>Anexa C constants + predicates</td><td>nothing</td>
+    <td>moves to the server, stays for UI decisions</td></tr>
+<tr><td><code>mock-data.js</code></td><td>tables + queries</td><td>both of the above</td>
+    <td>deleted, replaced by <code>api.js</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>5. Business rules — where each one is enforced</h2>
+<p class="lede">Most rules have two enforcement points: the UI must not <b>offer</b> the invalid thing, and the
+writer must <b>refuse</b> it anyway. The rule itself is defined once, in <code>rules.js</code>.</p>
+<div class="scroll">
+<table>
+<thead><tr><th>Rule</th><th>Defined in</th><th>UI hides</th><th>Writer refuses</th></tr></thead>
+<tbody>
+<tr><td>RB-01 · 15-minute slots</td><td><code>isOnSlotBoundary</code></td><td>slot grid (1.3)</td><td><code>addBooking</code> ✓</td></tr>
+<tr><td>RB-02 · free time, service fits in the day</td><td><code>ACTIVE_STATUSES</code>, <code>serviceFitsInDay</code></td><td>slot grid (1.3)</td><td><code>addBooking</code> ✓ (overlap + hours)</td></tr>
+<tr><td>RB-03 · ≥1h ahead, ≤30 days</td><td><code>bookingTimeProblem</code></td><td>slot grid (1.3)</td><td><code>addBooking</code> ✓</td></tr>
+<tr><td>RB-04 · DB guarantees no overlap</td><td>—</td><td>—</td><td><span class="tag t-done">Partea 2</span> composite unique key</td></tr>
+<tr><td>RB-05 · client cancels &gt;24h before</td><td><code>canClientCancel</code></td><td>account.html (1.4)</td><td>admin-only rule, server-side in 2.5</td></tr>
+<tr><td>RB-06 · status transitions</td><td><code>ALLOWED_TRANSITIONS</code></td><td>admin.html (1.5)</td><td><code>setBookingStatus</code> ✓</td></tr>
+<tr><td>RB-07 · max 3 active per client</td><td><code>MAX_ACTIVE_BOOKINGS</code></td><td>—</td><td><code>addBooking</code> ✓</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>6. Gaps — all closed</h2>
+<p class="lede">Ten found in review, all fixed. Kept here because each one names a mistake worth
+recognising again later.</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th>Was</th><th>Why it mattered</th><th>Now</th></tr></thead>
+<tbody>
+<tr><td>RB-01 unenforced</td><td><code>startsAt: 10:07</code> was accepted; the grid was the only thing stopping it</td>
+    <td><code>isOnSlotBoundary</code> → <code>INVALID_SLOT_START</code></td></tr>
+<tr><td>Opening hours unenforced</td><td>a booking could land on a closed Sunday, or run past closing</td>
+    <td><code>serviceFitsInDay</code> → <code>SALON_CLOSED</code> / <code>OUTSIDE_WORKING_HOURS</code></td></tr>
+<tr><td>Retired service bookable</td><td>an old link to <code>service.html?id=5</code> booked a withdrawn service</td>
+    <td><code>addBooking</code> checks <code>isActive</code> → <code>NOT_FOUND</code></td></tr>
+<tr><td><code>getActiveBookingsForDay</code> guessed</td><td>a missing employee id meant "everyone", so the grid greyed out Ana's hours because Maria was busy</td>
+    <td>throws a plain <code>Error</code></td></tr>
+<tr><td>Malformed date crashed</td><td><code>NaN</code> compares false against everything, so every rule passed and <code>toISOString()</code> threw a <code>RangeError</code></td>
+    <td><code>INVALID_DATE</code> 422</td></tr>
+<tr><td>No service validation</td><td>a 50-minute service does not divide into 15-minute rows, so <code>booking_slots</code> would break in 2.5</td>
+    <td><code>serviceFieldsProblem</code> → <code>INVALID_SERVICE</code></td></tr>
+<tr><td><code>updateWorkingHours</code> half-applied</td><td>it assigned as it looped, so a bad seventh day left days 1–6 already changed</td>
+    <td>validates the whole week, then applies</td></tr>
+<tr><td><code>countBookingsForDay</code> had no default</td><td>called bare it compared against <code>undefined</code> and confidently returned 0</td>
+    <td>defaults to today</td></tr>
+<tr><td><code>addService</code> accepted an id</td><td><code>{id: 999}</code> overrode <code>nextId()</code> — duplicate ids</td>
+    <td>whitelist of writable columns</td></tr>
+<tr><td><code>updateService</code> could repoint a row</td><td><code>Object.assign</code> copied <code>id</code>; SQL keeps the id in the WHERE</td>
+    <td>same whitelist</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note">
+<strong>The pattern worth remembering.</strong> Seven of the ten were the same mistake: <b>a rule stated in a
+comment but not in code</b>. Each function documented what it required and then trusted the caller. They only
+became visible once something started passing real input.
+</div>
+
+<h2>7. Open questions for the mentor</h2>
+<ol>
+  <li><b><code>booking_slots</code> must change key.</b> <code>UNIQUE(slot_starts_at)</code> would forbid two
+      employees from working the same hour. It has to become <code>UNIQUE(employee_id, slot_starts_at)</code>.</li>
+  <li><b>The two added service endpoints</b> — <code>GET /api/admin/services</code> and
+      <code>GET /api/services/:id</code> — are missing from Anexa B.</li>
+  <li><b>The two added employee endpoints</b> — <code>GET /api/employees</code> and
+      <code>GET /api/services/:id/employees</code>.</li>
+  <li><b>Pagination envelope</b> field names: <code>items / total / page / pageSize</code>.</li>
+  <li><b>Errors thrown, not returned</b> — confirm <code>api.js</code> will throw in Partea 3.</li>
+  <li><b><code>price</code> cast to a number server-side</b> in 2.4, so <code>DECIMAL</code> does not arrive as
+      <code>"120.00"</code>.</li>
+  <li><b>Field naming</b>: the mock is camelCase, SQL is snake_case. Partea 2 must alias or map.</li>
+  <li><b>Grad de ocupare</b> — definition still undecided.</li>
+  <li><b>Admin management of employees</b> — no CRUD exists. Is it in scope?</li>
+</ol>
+
+<h2>8. Still to build in Partea 1</h2>
+<ul>
+  <li><b>The slot calculator</b> — pure, its own module, consumed by 1.3 and lifted to the server in 2.5.
+      It is the last piece of logic the mock does not have.</li>
+  <li><b>The five pages</b>: index, register/login, service, account, admin.</li>
+  <li><b>The admin agenda needs an <em>Angajat</em> column</b> — the coordinator's mockup predates employees.</li>
+  <li><b>The revenue tile must be relabelled</b> "venit realizat", not "venit estimat".</li>
+</ul>
+
+</div>
+</body>
+</html>
