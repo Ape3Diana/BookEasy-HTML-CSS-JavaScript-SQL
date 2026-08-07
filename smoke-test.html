@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BookEasy — smoke test</title>
+<style>
+  :root { --ok:#2E7D32; --bad:#B3261E; --ink:#26231E; --soft:#6B655C;
+          --bg:#F7F5F1; --surface:#fff; --line:#E2DED6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ok:#7BC47F; --bad:#F2867E; --ink:#EAE7E1; --soft:#A09A90;
+            --bg:#17191B; --surface:#1F2225; --line:#33373B; }
+  }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:14px/1.6 system-ui,-apple-system,sans-serif; }
+  .wrap { max-width:900px; margin:auto; padding:24px 18px 60px; }
+  h1 { font:600 20px/1.2 Georgia,serif; margin:0 0 4px; }
+  h2 { font:600 13px/1.4 system-ui,sans-serif; text-transform:uppercase; letter-spacing:.8px;
+       color:var(--soft); margin:26px 0 6px; }
+  p.lede { color:var(--soft); margin:0 0 8px; }
+  ul { list-style:none; padding:0; margin:0; }
+  li { padding:2px 0 2px 22px; text-indent:-22px; }
+  .ok { color:var(--ok); } .fail { color:var(--bad); font-weight:600; }
+  code { font-family:ui-monospace,Menlo,monospace; background:var(--surface);
+         border:1px solid var(--line); padding:0 4px; border-radius:4px; }
+  #summary { position:sticky; top:0; margin:14px 0; padding:12px 16px; border-radius:8px;
+             font-weight:600; background:var(--surface); border:1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>BookEasy — smoke test</h1>
+<p class="lede">Temporary. Verifies <code>date-utils.js</code>, <code>rules.js</code> and
+<code>mock-data.js</code>. Delete once the real pages exercise them.</p>
+<div id="summary">running…</div>
+<div id="out"></div>
+
+<script type="module">
+import {
+    toDateKey, instantAt, todayKey, addDays, weekdayOf, plusMinutes, minutesOfDay,
+} from './date-utils.js';
+
+import {
+    SLOT_MINUTES, MIN_LEAD_MINUTES, MAX_HORIZON_DAYS, CANCEL_WINDOW_HOURS,
+    MAX_ACTIVE_BOOKINGS, MIN_SERVICE_MINUTES, MAX_SERVICE_MINUTES,
+    ACTIVE_STATUSES, ALLOWED_TRANSITIONS,
+    isActiveStatus, canTransition, bookingTimeProblem, canClientCancel,
+    serviceFitsInDay, isOnSlotBoundary, serviceFieldsProblem,
+} from './rules.js';
+
+import {
+    getActiveServices, getAllServices, getServiceById,
+    getActiveEmployees, getEmployeesForService,
+    getAllWorkingHours, getWorkingHoursFor, updateWorkingHours,
+    getBookingsForUser, getBookingsForDay, getActiveBookingsForDay,
+    getStats, countActiveFutureBookings,
+    login, logout, getCurrentUser, addUser,
+    addBooking, cancelBooking, setBookingStatus,
+    addService, updateService, deactivateService,
+} from './mock-data.js';
+
+const out = document.getElementById('out');
+let passed = 0, failed = 0;
+
+function section(title) {
+    const h = document.createElement('h2');
+    h.textContent = title;
+    out.append(h, Object.assign(document.createElement('ul'), { id: `s-${out.children.length}` }));
+}
+function line(ok, label, detail) {
+    const li = document.createElement('li');
+    li.className = ok ? 'ok' : 'fail';
+    li.textContent = `${ok ? '✓' : '✗'} ${label}${detail || ''}`;
+    out.lastElementChild.append(li);
+    ok ? passed++ : failed++;
+}
+function check(label, fn) {
+    try {
+        const result = fn();
+        line(result === true, label, result === true ? '' : ` — got ${JSON.stringify(result)}`);
+    } catch (err) {
+        line(false, label, ` — threw ${err.name}: ${err.message}`);
+    }
+}
+function throws(label, code, fn) {
+    try {
+        fn();
+        line(false, label, ' — did not throw');
+    } catch (err) {
+        line(err.code === code, label, err.code === code ? '' : ` — got ${err.code ?? err.name}: ${err.message}`);
+    }
+}
+
+const TOMORROW = addDays(todayKey(), 1);
+
+// A day whose schedule can actually hold the fixtures below — the writing section books
+// 16:00, 16:15 and 16:30, so it needs a day open from before 16:00 until at least 17:30.
+// "Tomorrow" is not good enough: Saturday closes at 14:00 and Sunday is closed entirely, so a
+// hardcoded tomorrow-at-16:00 fails whenever today is Friday or Saturday. Deriving the day from
+// the working hours makes the test independent of which weekday you happen to run it on.
+const SLOTDAY = [...Array(8).keys()]
+    .map(i => addDays(todayKey(), i + 1))
+    .find(key => {
+        const h = getWorkingHoursFor(weekdayOf(key));
+        return h?.opensAt && h.opensAt <= '16:00' && h.closesAt >= '17:30';
+    });
+const ANA = 1, MARIA = 2, ELENA = 3, IOANA_GONE = 4;
+const HAIR_W = 1, HAIR_M = 2, NAILS = 3, COLOUR = 4, RETIRED = 5;
+const DIANA = 2, RADU = 3, MARIA_C = 4;
+
+// The seed no longer uses fixed offsets — it anchors its future bookings to the first upcoming
+// day that can hold them. So the reading tests have to ASK the data which day that is, rather
+// than assume. Radu's two-hour colour booking is the marker.
+const SEED_DAY = toDateKey(
+    getBookingsForUser(RADU).items.find(b => b.serviceId === COLOUR).startsAt);
+
+// ────────────────────────────────────────────────────────────── date-utils
+section('date-utils');
+check('round-trip 20:00 stays on the same local day', () =>
+    toDateKey(instantAt(todayKey(), '20:00')) === todayKey());
+check('round-trip 00:00 stays on the same local day', () =>
+    toDateKey(instantAt(todayKey(), '00:00')) === todayKey());
+check('round-trip 23:45 stays on the same local day', () =>
+    toDateKey(instantAt(todayKey(), '23:45')) === todayKey());
+check('instantAt zeroes seconds and ms', () =>
+    instantAt(todayKey(), '09:15').endsWith(':00.000Z'));
+check('addDays crosses a month end', () => addDays('2026-08-31', 1) === '2026-09-01');
+check('addDays crosses a year end', () => addDays('2026-12-31', 1) === '2027-01-01');
+check('addDays goes backwards', () => addDays('2026-09-01', -1) === '2026-08-31');
+check('addDays handles a leap day', () => addDays('2028-02-28', 1) === '2028-02-29');
+check('weekdayOf matches a timezone-independent oracle', () =>
+    weekdayOf('2026-08-06') === new Date('2026-08-06T12:00:00Z').getUTCDay());
+check('minutesOfDay reads local wall-clock', () =>
+    minutesOfDay(instantAt(todayKey(), '09:15')) === 9 * 60 + 15);
+check('minutesOfDay at midnight is 0', () =>
+    minutesOfDay(instantAt(todayKey(), '00:00')) === 0);
+check('plusMinutes adds real elapsed time', () =>
+    plusMinutes(instantAt(todayKey(), '10:00'), 90) === instantAt(todayKey(), '11:30'));
+
+// ────────────────────────────────────────────────────────────── rules
+section('rules — constants and predicates');
+check('RB-01 slot size', () => SLOT_MINUTES === 15);
+check('RB-03 lead time', () => MIN_LEAD_MINUTES === 60);
+check('RB-03 horizon', () => MAX_HORIZON_DAYS === 30);
+check('RB-05 window', () => CANCEL_WINDOW_HOURS === 24);
+check('RB-07 limit', () => MAX_ACTIVE_BOOKINGS === 3);
+check('RB-02 active statuses', () => String(ACTIVE_STATUSES) === 'pending,confirmed');
+check('cancelled is not active', () => isActiveStatus('cancelled') === false);
+check('completed is not active either', () => isActiveStatus('completed') === false);
+
+check('RB-06 pending → confirmed', () => canTransition('pending', 'confirmed') === true);
+check('RB-06 pending → cancelled', () => canTransition('pending', 'cancelled') === true);
+check('RB-06 confirmed → completed', () => canTransition('confirmed', 'completed') === true);
+check('RB-06 pending → completed is NOT allowed', () => canTransition('pending', 'completed') === false);
+check('RB-06 completed is terminal', () => ALLOWED_TRANSITIONS.completed.length === 0);
+check('RB-06 cancelled is terminal', () => ALLOWED_TRANSITIONS.cancelled.length === 0);
+check('RB-06 unknown status does not crash', () => canTransition('nonsense', 'pending') === false);
+
+check('RB-03 flags the past', () =>
+    bookingTimeProblem(instantAt(addDays(todayKey(), -1), '10:00')) === 'TOO_SOON');
+check('RB-03 flags 30 minutes from now', () =>
+    bookingTimeProblem(new Date(Date.now() + 30 * 60000).toISOString()) === 'TOO_SOON');
+check('RB-03 accepts 2 hours from now', () =>
+    bookingTimeProblem(new Date(Date.now() + 120 * 60000).toISOString()) === null);
+check('RB-03 flags beyond 30 days', () =>
+    bookingTimeProblem(instantAt(addDays(todayKey(), 40), '10:00')) === 'TOO_FAR');
+check('RB-03 accepts day 29', () =>
+    bookingTimeProblem(instantAt(addDays(todayKey(), 29), '10:00')) === null);
+
+const THU = { opensAt: '09:00', closesAt: '20:00' };
+check('60min at 19:00 fits (last valid start)', () => serviceFitsInDay(19 * 60, 60, THU) === true);
+check('60min at 19:15 does NOT fit', () => serviceFitsInDay(19 * 60 + 15, 60, THU) === false);
+check('a start before opening does not fit', () => serviceFitsInDay(8 * 60, 30, THU) === false);
+check('exactly at opening fits', () => serviceFitsInDay(9 * 60, 30, THU) === true);
+check('ending exactly at closing fits', () => serviceFitsInDay(19 * 60 + 30, 30, THU) === true);
+check('a closed day fits nothing', () =>
+    serviceFitsInDay(10 * 60, 30, { opensAt: null, closesAt: null }) === false);
+check('null hours fit nothing', () => serviceFitsInDay(10 * 60, 30, null) === false);
+
+check('RB-01 accepts :15', () => isOnSlotBoundary(10 * 60 + 15) === true);
+check('RB-01 rejects :07', () => isOnSlotBoundary(10 * 60 + 7) === false);
+
+check('RB-05 blocks a booking under 24h away', () =>
+    canClientCancel({ status: 'confirmed', startsAt: instantAt(todayKey(), '23:59') }) === false);
+check('RB-05 allows one 3 days out', () =>
+    canClientCancel({ status: 'pending', startsAt: instantAt(addDays(todayKey(), 3), '10:00') }) === true);
+check('RB-05 refuses an already-cancelled booking', () =>
+    canClientCancel({ status: 'cancelled', startsAt: instantAt(addDays(todayKey(), 3), '10:00') }) === false);
+check('RB-05 refuses a completed booking', () =>
+    canClientCancel({ status: 'completed', startsAt: instantAt(addDays(todayKey(), 3), '10:00') }) === false);
+
+check('service validation accepts 45 min / 90 lei', () =>
+    serviceFieldsProblem({ durationMin: 45, price: 90 }) === null);
+check('service validation rejects 50 min', () =>
+    typeof serviceFieldsProblem({ durationMin: 50 }) === 'string');
+check('service validation rejects 10 min', () =>
+    typeof serviceFieldsProblem({ durationMin: 10 }) === 'string');
+check('service validation rejects 300 min', () =>
+    typeof serviceFieldsProblem({ durationMin: 300 }) === 'string');
+check('service validation rejects a negative price', () =>
+    typeof serviceFieldsProblem({ price: -5 }) === 'string');
+check('service validation accepts price 0', () =>
+    serviceFieldsProblem({ price: 0 }) === null);
+check('absent fields are fine (partial update)', () =>
+    serviceFieldsProblem({}) === null);
+
+// ────────────────────────────────────────────────────────────── services
+section('services');
+check('catalogue hides the retired service', () =>
+    getActiveServices().length === 4 && getActiveServices().every(s => s.isActive));
+check('admin list includes it', () => getAllServices().length === 5);
+check('catalogue is sorted by name', () => {
+    const names = getActiveServices().map(s => s.name);
+    return String(names) === String([...names].sort((a, b) => a.localeCompare(b, 'ro')));
+});
+check('price is a number', () => typeof getActiveServices()[0].price === 'number');
+throws('unknown service → NOT_FOUND', 'NOT_FOUND', () => getServiceById(999));
+check('getServiceById still returns inactive ones (the admin edits them)', () =>
+    getServiceById(RETIRED).isActive === false);
+check('readers return copies, not live rows', () => {
+    getActiveServices()[0].name = 'MUTATED';
+    return !getActiveServices().some(s => s.name === 'MUTATED');
+});
+
+// ────────────────────────────────────────────────────────────── employees
+section('employees');
+check('inactive employee is not listed', () =>
+    getActiveEmployees().length === 3 && !getActiveEmployees().some(e => e.id === IOANA_GONE));
+check('employees are sorted by name', () => {
+    const names = getActiveEmployees().map(e => e.fullName);
+    return String(names) === String([...names].sort((a, b) => a.localeCompare(b, 'ro')));
+});
+check('two people can do Tuns damă', () =>
+    getEmployeesForService(HAIR_W).length === 2);
+check('only Ana does Tuns bărbați', () => {
+    const list = getEmployeesForService(HAIR_M);
+    return list.length === 1 && list[0].id === ANA;
+});
+check('a departed employee is never offered', () =>
+    !getEmployeesForService(HAIR_W).some(e => e.id === IOANA_GONE));
+throws('employees for an unknown service → NOT_FOUND', 'NOT_FOUND',
+    () => getEmployeesForService(999));
+throws('employees for a WITHDRAWN service → NOT_FOUND', 'NOT_FOUND',
+    () => getEmployeesForService(RETIRED));
+check('DELETE returns nothing (204 No Content)', () => {
+    const s = addService({ name: 'Efemer', durationMin: 15, price: 10 });
+    return deactivateService(s.id) === undefined;
+});
+
+// ────────────────────────────────────────────────────────────── working hours
+section('working hours');
+check('all seven weekdays exist', () => getAllWorkingHours().length === 7);
+check('Sunday is closed', () => getWorkingHoursFor(0).opensAt === null);
+check('Saturday is a short day', () => getWorkingHoursFor(6).closesAt === '14:00');
+throws('an unknown weekday → NOT_FOUND', 'NOT_FOUND',
+    () => updateWorkingHours([{ weekday: 9, opensAt: '09:00', closesAt: '10:00' }]));
+throws('closing before opening → INVALID_HOURS', 'INVALID_HOURS',
+    () => updateWorkingHours([{ weekday: 1, opensAt: '18:00', closesAt: '09:00' }]));
+check('a rejected update changes NOTHING (all-or-nothing)', () => {
+    const before = getWorkingHoursFor(1).opensAt;
+    try {
+        updateWorkingHours([
+            { weekday: 1, opensAt: '08:00', closesAt: '17:00' },   // valid
+            { weekday: 2, opensAt: '18:00', closesAt: '09:00' },   // invalid → whole call fails
+        ]);
+    } catch { /* expected */ }
+    return getWorkingHoursFor(1).opensAt === before;
+});
+check('a valid update applies', () => {
+    updateWorkingHours([{ weekday: 2, opensAt: '08:00', closesAt: '19:00' }]);
+    const ok = getWorkingHoursFor(2).opensAt === '08:00';
+    updateWorkingHours([{ weekday: 2, opensAt: '09:00', closesAt: '18:00' }]);   // restore
+    return ok;
+});
+check('a day can be closed with nulls', () => {
+    updateWorkingHours([{ weekday: 3, opensAt: null, closesAt: null }]);
+    const ok = getWorkingHoursFor(3).opensAt === null;
+    updateWorkingHours([{ weekday: 3, opensAt: '09:00', closesAt: '18:00' }]);   // restore
+    return ok;
+});
+
+// ────────────────────────────────────────────────────────────── auth
+section('auth');
+throws('wrong password → INVALID_CREDENTIALS', 'INVALID_CREDENTIALS',
+    () => login('diana@mail.com', 'gresit'));
+throws('unknown email → the SAME error', 'INVALID_CREDENTIALS',
+    () => login('nimeni@mail.com', 'orice'));
+check('login returns the user without the password', () => {
+    const u = login('diana@mail.com', 'parola123');
+    return u.fullName === 'Diana Client' && !('password' in u);
+});
+check('getCurrentUser reflects the session', () => getCurrentUser().email === 'diana@mail.com');
+check('logout makes you a visitor', () => { logout(); return getCurrentUser() === null; });
+check('the session survives a reload (localStorage)', () => {
+    login('diana@mail.com', 'parola123');
+    const stored = localStorage.getItem('bookeasy.userId');
+    logout();
+    return stored === '2';           // a string in storage, a number in the module
+});
+throws('registering a taken email → EMAIL_TAKEN', 'EMAIL_TAKEN',
+    () => addUser({ fullName: 'X', email: 'diana@mail.com', password: 'parola123' }));
+check('email match is case-insensitive', () => {
+    try { addUser({ fullName: 'X', email: 'DIANA@mail.com', password: 'p' }); return false; }
+    catch (e) { return e.code === 'EMAIL_TAKEN'; }
+});
+check('register logs you straight in, as a client', () => {
+    const u = addUser({ fullName: 'Test Nou', email: 'test@mail.com', password: 'parola123' });
+    return u.role === 'client' && !('password' in u) && getCurrentUser().email === 'test@mail.com';
+});
+
+// ────────────────────────────────────────────────────────────── reading bookings
+section('bookings — reading');
+check('Diana has 8 bookings, 5 on page 1', () => {
+    const p = getBookingsForUser(DIANA);
+    return p.total === 8 && p.items.length === 5 && p.page === 1;
+});
+check('page 2 has the remaining 3', () => getBookingsForUser(DIANA, 2).items.length === 3);
+check('page 99 is empty but does not break', () => getBookingsForUser(DIANA, 99).items.length === 0);
+check('page 0 is clamped to 1', () => getBookingsForUser(DIANA, 0).page === 1);
+check('page -5 is clamped to 1', () => getBookingsForUser(DIANA, -5).page === 1);
+check('a client with no bookings gets an empty page', () => {
+    const p = getBookingsForUser(MARIA_C);
+    return p.total === 0 && p.items.length === 0;
+});
+check('bookings are newest first', () => {
+    const items = getBookingsForUser(DIANA).items;
+    return items.every((b, i) => i === 0 || b.startsAt <= items[i - 1].startsAt);
+});
+check('bookings carry every JOIN field', () => {
+    const b = getBookingsForUser(DIANA).items[0];
+    return typeof b.price === 'number' && !!b.serviceName && !!b.employeeName
+        && !!b.userFullName && !!b.userEmail;
+});
+
+check('the agenda defaults to today', () =>
+    getBookingsForDay().every(b => toDateKey(b.startsAt) === todayKey()));
+check('the agenda is chronological', () => {
+    const rows = getBookingsForDay(SEED_DAY);
+    return rows.every((r, i) => i === 0 || r.startsAt >= rows[i - 1].startsAt);
+});
+check('status filter narrows', () =>
+    getBookingsForDay(SEED_DAY, { status: 'confirmed' }).every(b => b.status === 'confirmed'));
+check('employee filter narrows', () =>
+    getBookingsForDay(SEED_DAY, { employeeId: ANA }).every(b => b.employeeId === ANA));
+check('empty string means ALL, not none', () =>
+    getBookingsForDay(SEED_DAY, { status: '', employeeId: '' }).length
+    === getBookingsForDay(SEED_DAY).length);
+check('both filters combine', () =>
+    getBookingsForDay(SEED_DAY, { status: 'confirmed', employeeId: ANA })
+        .every(b => b.status === 'confirmed' && b.employeeId === ANA));
+
+check('active-for-day is scoped to one employee', () =>
+    getActiveBookingsForDay(SEED_DAY, ANA).every(b => b.employeeId === ANA));
+check('a missing employee id throws instead of meaning "everyone"', () => {
+    try { getActiveBookingsForDay(SEED_DAY); return false; }
+    catch (e) { return e instanceof Error; }
+});
+check('Maria has no blocking bookings tomorrow', () =>
+    getActiveBookingsForDay(SEED_DAY, MARIA).length === 0);
+
+// ────────────────────────────────────────────────────────────── stats
+section('stats');
+const ALL_TIME = [addDays(todayKey(), -365), addDays(todayKey(), 365)];
+check('revenue counts only completed, at the snapshot price', () =>
+    getStats(...ALL_TIME).revenue === 60 + 110 + 90);   // note 60 and 110, not 70 and 120
+check('a future range earns nothing', () =>
+    getStats(addDays(todayKey(), 1), addDays(todayKey(), 30)).revenue === 0);
+check('a range can isolate one booking', () =>
+    getStats(addDays(todayKey(), -5), addDays(todayKey(), -5)).revenue === 60);
+check('changing the price list does NOT rewrite history', () => {
+    const before = getStats(...ALL_TIME).revenue;
+    updateService(HAIR_M, { price: 999 });
+    const after = getStats(...ALL_TIME).revenue;
+    updateService(HAIR_M, { price: 70 });     // restore
+    return before === after;
+});
+check('the count excludes cancelled', () => {
+    const day = todayKey();
+    const rows = getBookingsForDay(day);
+    return getStats(day).bookings === rows.filter(b => b.status !== 'cancelled').length;
+});
+check('stats default to today', () => getStats().from === todayKey());
+check('byStatus covers all four statuses', () => {
+    const s = getStats(...ALL_TIME).byStatus;
+    return ['pending', 'confirmed', 'completed', 'cancelled'].every(k => typeof s[k] === 'number');
+});
+check('byStatus totals match the rows in range', () => {
+    const s = getStats(...ALL_TIME);
+    return Object.values(s.byStatus).reduce((a, b) => a + b, 0) >= s.bookings;
+});
+check('topServices lists at most 3, most frequent first', () => {
+    const top = getStats(...ALL_TIME).topServices;
+    return top.length <= 3 && top.every((t, i) => i === 0 || t.count <= top[i - 1].count);
+});
+check('RB-07 counts only future active bookings', () =>
+    countActiveFutureBookings(MARIA_C) === 0);
+
+// ────────────────────────────────────────────────────────────── writing bookings
+section('bookings — writing');
+throws('a malformed date → INVALID_DATE', 'INVALID_DATE',
+    () => addBooking({ userId: RADU, serviceId: HAIR_M, employeeId: ANA, startsAt: 'maine dimineata' }));
+throws('an off-grid minute → INVALID_SLOT_START', 'INVALID_SLOT_START',
+    () => addBooking({ userId: RADU, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(SLOTDAY, '10:07') }));
+throws('an unknown service → NOT_FOUND', 'NOT_FOUND',
+    () => addBooking({ userId: RADU, serviceId: 999, employeeId: ANA, startsAt: instantAt(SLOTDAY, '16:00') }));
+throws('a retired service → NOT_FOUND', 'NOT_FOUND',
+    () => addBooking({ userId: RADU, serviceId: RETIRED, employeeId: ELENA, startsAt: instantAt(SLOTDAY, '11:00') }));
+throws('a departed employee → NOT_FOUND', 'NOT_FOUND',
+    () => addBooking({ userId: RADU, serviceId: HAIR_W, employeeId: IOANA_GONE, startsAt: instantAt(SLOTDAY, '16:00') }));
+throws('an employee who does not do it → EMPLOYEE_CANNOT_PERFORM', 'EMPLOYEE_CANNOT_PERFORM',
+    () => addBooking({ userId: RADU, serviceId: NAILS, employeeId: ANA, startsAt: instantAt(SLOTDAY, '16:00') }));
+check('ONE DIARY PER PERSON: a different service still collides', () => {
+    // Ana is colouring hair 13:00–15:00 on SEED_DAY. She may also cut hair — but she is one
+    // person, so a haircut at 14:00 must be refused. The overlap check filters on employeeId
+    // and deliberately NOT on serviceId; adding a service filter here would look like a
+    // sensible optimisation and would quietly let her be booked twice at once.
+    try {
+        addBooking({ userId: MARIA_C, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(SEED_DAY, '14:00') });
+        return false;
+    } catch (err) {
+        return err.code === 'SLOT_TAKEN';
+    }
+});
+
+throws('no session → UNAUTHENTICATED', 'UNAUTHENTICATED',
+    () => addBooking({ userId: 9999, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(SLOTDAY, '16:00') }));
+throws('the past → TOO_SOON', 'TOO_SOON',
+    () => addBooking({ userId: RADU, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(addDays(todayKey(), -1), '10:00') }));
+throws('beyond the horizon → TOO_FAR', 'TOO_FAR',
+    () => addBooking({ userId: RADU, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(addDays(todayKey(), 45), '10:00') }));
+
+// find a day the salon is closed, and one where the service cannot fit
+const closedDay = [...Array(8).keys()]
+    .map(i => addDays(todayKey(), i + 2))
+    .find(k => !getWorkingHoursFor(weekdayOf(k))?.opensAt);
+if (closedDay) {
+    throws('a closed day → SALON_CLOSED', 'SALON_CLOSED',
+        () => addBooking({ userId: RADU, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(closedDay, '10:00') }));
+} else {
+    line(false, 'a closed day → SALON_CLOSED', ' — no closed day found in range');
+}
+
+const openDay = [...Array(8).keys()]
+    .map(i => addDays(todayKey(), i + 2))
+    .find(k => getWorkingHoursFor(weekdayOf(k))?.opensAt);
+throws('a service running past closing → OUTSIDE_WORKING_HOURS', 'OUTSIDE_WORKING_HOURS', () => {
+    const hours = getWorkingHoursFor(weekdayOf(openDay));
+    const lateStart = hours.closesAt.slice(0, 2) + ':00';        // exactly at closing time
+    return addBooking({ userId: RADU, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(openDay, lateStart) });
+});
+throws('before opening → OUTSIDE_WORKING_HOURS', 'OUTSIDE_WORKING_HOURS',
+    () => addBooking({ userId: RADU, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(openDay, '06:00') }));
+
+check('a valid booking is accepted and snapshots the price', () => {
+    const b = addBooking({ userId: RADU, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(SLOTDAY, '16:00') });
+    return b.status === 'pending' && b.price === 70
+        && b.employeeName === 'Ana Popescu' && b.userFullName === 'Radu Client';
+});
+throws('RB-07 — Radu\'s 4th active booking → TOO_MANY_BOOKINGS', 'TOO_MANY_BOOKINGS',
+    () => addBooking({ userId: RADU, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(SLOTDAY, '17:00') }));
+throws('the same slot with the same employee → SLOT_TAKEN', 'SLOT_TAKEN',
+    () => addBooking({ userId: MARIA_C, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(SLOTDAY, '16:00') }));
+throws('an overlapping slot with the same employee → SLOT_TAKEN', 'SLOT_TAKEN',
+    () => addBooking({ userId: MARIA_C, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(SLOTDAY, '16:15') }));
+check('THE POINT OF EMPLOYEES: the same hour with a different person is fine', () => {
+    const b = addBooking({ userId: MARIA_C, serviceId: HAIR_W, employeeId: MARIA, startsAt: instantAt(SLOTDAY, '16:00') });
+    return b.employeeId === MARIA;
+});
+check('touching the end of another booking is fine (half-open intervals)', () => {
+    // Ana: 16:00–16:30 exists. 16:30 must be free.
+    const b = addBooking({ userId: MARIA_C, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(SLOTDAY, '16:30') });
+    return b.startsAt === instantAt(SLOTDAY, '16:30');
+});
+check('cancelling frees the interval again', () => {
+    // Not Diana: the seed deliberately puts her at the RB-07 limit (bookings 1, 3 and 6 are all
+    // future and active), which makes her the right fixture for testing the limit and the wrong
+    // one for creating anything. Maria has two active bookings at this point in the run.
+    const taken = getBookingsForDay(SLOTDAY, { employeeId: ANA })
+        .find(b => b.startsAt === instantAt(SLOTDAY, '16:00'));
+    cancelBooking(taken.id);
+    const again = addBooking({ userId: MARIA_C, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(SLOTDAY, '16:00') });
+    return again.status === 'pending';   // cancelBooking returns nothing — 204 No Content
+});
+throws('cancelling something that does not exist → NOT_FOUND', 'NOT_FOUND',
+    () => cancelBooking(99999));
+
+section('status transitions');
+throws('completed → pending → INVALID_TRANSITION', 'INVALID_TRANSITION', () => {
+    const done = getBookingsForUser(DIANA).items.find(b => b.status === 'completed');
+    return setBookingStatus(done.id, 'pending');
+});
+throws('cancelled → confirmed → INVALID_TRANSITION', 'INVALID_TRANSITION', () => {
+    const gone = getBookingsForUser(DIANA).items.find(b => b.status === 'cancelled');
+    return setBookingStatus(gone.id, 'confirmed');
+});
+check('pending → confirmed works and is persisted', () => {
+    const p = getBookingsForDay(SLOTDAY).find(b => b.status === 'pending');
+    const updated = setBookingStatus(p.id, 'confirmed');
+    return updated.status === 'confirmed'
+        && getBookingsForDay(SLOTDAY).find(b => b.id === p.id).status === 'confirmed';
+});
+check('cancelling through the status machine stamps cancelledAt', () => {
+    const c = getBookingsForDay(SLOTDAY).find(b => b.status === 'confirmed');
+    return setBookingStatus(c.id, 'cancelled').cancelledAt !== null;
+});
+throws('unknown booking → NOT_FOUND', 'NOT_FOUND', () => setBookingStatus(99999, 'confirmed'));
+
+// ────────────────────────────────────────────────────────────── writing services
+section('services — writing');
+check('a form string becomes a real number', () => {
+    const s = addService({ name: 'Test', description: '', durationMin: '45', price: '99' });
+    return s.price === 99 && s.durationMin === 45;
+});
+throws('50 minutes → INVALID_SERVICE', 'INVALID_SERVICE',
+    () => addService({ name: 'Bad', durationMin: 50, price: 10 }));
+throws('a negative price → INVALID_SERVICE', 'INVALID_SERVICE',
+    () => addService({ name: 'Bad', durationMin: 30, price: -5 }));
+throws('a missing duration → INVALID_SERVICE', 'INVALID_SERVICE',
+    () => addService({ name: 'Bad', price: 10 }));
+throws('a missing name → INVALID_SERVICE', 'INVALID_SERVICE',
+    () => addService({ durationMin: 30, price: 10 }));
+check('the caller cannot choose the id', () => {
+    const s = addService({ id: 999, name: 'Id Test', durationMin: 30, price: 10 });
+    return s.id !== 999;
+});
+check('the caller cannot repoint a row', () => {
+    updateService(HAIR_W, { id: 42, name: 'Tuns damă' });
+    return getServiceById(HAIR_W).id === HAIR_W;
+});
+throws('updating something that does not exist → NOT_FOUND', 'NOT_FOUND',
+    () => updateService(99999, { price: 1 }));
+throws('an invalid update → INVALID_SERVICE', 'INVALID_SERVICE',
+    () => updateService(HAIR_W, { durationMin: 7 }));
+check('soft delete hides it from the catalogue but not from the admin', () => {
+    const s = addService({ name: 'De șters', durationMin: 15, price: 10 });
+    deactivateService(s.id);
+    return !getActiveServices().some(x => x.id === s.id)
+        && getAllServices().some(x => x.id === s.id);
+});
+check('reactivating is just an update', () => {
+    const s = addService({ name: 'Reactivat', durationMin: 15, price: 10 });
+    deactivateService(s.id);
+    updateService(s.id, { isActive: true });
+    return getActiveServices().some(x => x.id === s.id);
+});
+
+// ────────────────────────────────────────────────────────────── summary
+const summary = document.getElementById('summary');
+summary.textContent = `${passed} passed, ${failed} failed`;
+summary.style.color = failed ? 'var(--bad)' : 'var(--ok)';
+</script>
+</div>
+</body>
+</html>
