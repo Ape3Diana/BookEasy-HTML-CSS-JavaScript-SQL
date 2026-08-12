@@ -8,6 +8,7 @@ import {
     serviceFitsInDay,
     isOnSlotBoundary,
     serviceFieldsProblem,
+    registrationProblem,
 } from './rules.js';
 
 // The instant ↔ local-day conversions live in date-utils.js.
@@ -591,6 +592,11 @@ function nextId(rows) {
 // (Pas 2.3), and what lets the form show "Acest email este deja folosit" under the field.
 // role is always 'client': an admin is created by the seed, never by registration.
 export function addUser({ fullName, email, password }) {
+    // Pas 2.3: the server validates whatever the client validated. Checked before the duplicate
+    // lookup, so a malformed email is reported as malformed rather than as "already taken".
+    const problem = registrationProblem({ fullName, email, password });
+    if (problem) throw new ApiError('INVALID_REGISTRATION', problem, 422);
+
     if (getUserByEmail(email)) {
         throw new ApiError('EMAIL_TAKEN', 'Acest email este deja folosit.', 409);
     }

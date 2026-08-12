@@ -42,10 +42,10 @@ import {
 
 import {
     SLOT_MINUTES, MIN_LEAD_MINUTES, MAX_HORIZON_DAYS, CANCEL_WINDOW_HOURS,
-    MAX_ACTIVE_BOOKINGS, MIN_SERVICE_MINUTES, MAX_SERVICE_MINUTES,
+    MAX_ACTIVE_BOOKINGS, MIN_SERVICE_MINUTES, MAX_SERVICE_MINUTES, MIN_PASSWORD_LENGTH,
     ACTIVE_STATUSES, ALLOWED_TRANSITIONS,
     isActiveStatus, canTransition, bookingTimeProblem, canClientCancel,
-    serviceFitsInDay, isOnSlotBoundary, serviceFieldsProblem,
+    serviceFitsInDay, isOnSlotBoundary, serviceFieldsProblem, registrationProblem,
 } from './js/rules.js';
 
 import {
@@ -189,6 +189,12 @@ check('RB-05 refuses an already-cancelled booking', () =>
 check('RB-05 refuses a completed booking', () =>
     canClientCancel({ status: 'completed', startsAt: instantAt(addDays(todayKey(), 3), '10:00') }) === false);
 
+check('registration accepts valid input', () =>
+    registrationProblem({ fullName: 'Ana', email: 'a@b.ro', password: 'parola123' }) === null);
+check('registration rejects a 7-character password', () =>
+    typeof registrationProblem({ fullName: 'Ana', email: 'a@b.ro', password: '1234567' }) === 'string');
+check('MIN_PASSWORD_LENGTH is 8', () => MIN_PASSWORD_LENGTH === 8);
+
 check('service validation accepts 45 min / 90 lei', () =>
     serviceFieldsProblem({ durationMin: 45, price: 90 }) === null);
 check('service validation rejects 50 min', () =>
@@ -300,9 +306,20 @@ check('the session survives a reload (localStorage)', () => {
 throws('registering a taken email → EMAIL_TAKEN', 'EMAIL_TAKEN',
     () => addUser({ fullName: 'X', email: 'diana@mail.com', password: 'parola123' }));
 check('email match is case-insensitive', () => {
-    try { addUser({ fullName: 'X', email: 'DIANA@mail.com', password: 'p' }); return false; }
+    try { addUser({ fullName: 'X', email: 'DIANA@mail.com', password: 'parola123' }); return false; }
     catch (e) { return e.code === 'EMAIL_TAKEN'; }
 });
+throws('a short password → INVALID_REGISTRATION', 'INVALID_REGISTRATION',
+    () => addUser({ fullName: 'X', email: 'nou@example.com', password: 'scurt' }));
+throws('a malformed email → INVALID_REGISTRATION', 'INVALID_REGISTRATION',
+    () => addUser({ fullName: 'X', email: 'nu-i-email', password: 'parola123' }));
+throws('an empty name → INVALID_REGISTRATION', 'INVALID_REGISTRATION',
+    () => addUser({ fullName: '   ', email: 'nou@example.com', password: 'parola123' }));
+check('a malformed email is reported as malformed, not as taken', () => {
+    try { addUser({ fullName: 'X', email: 'diana', password: 'parola123' }); return false; }
+    catch (e) { return e.code === 'INVALID_REGISTRATION'; }
+});
+
 check('register logs you straight in, as a client', () => {
     const u = addUser({ fullName: 'Test Nou', email: 'test@mail.com', password: 'parola123' });
     return u.role === 'client' && !('password' in u) && getCurrentUser().email === 'test@mail.com';

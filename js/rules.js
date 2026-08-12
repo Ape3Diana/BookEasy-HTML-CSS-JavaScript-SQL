@@ -22,6 +22,8 @@ export const MAX_ACTIVE_BOOKINGS = 3;       // RB-07 — per client, future and 
 export const MIN_SERVICE_MINUTES = 15;
 export const MAX_SERVICE_MINUTES = 240;
 
+export const MIN_PASSWORD_LENGTH = 8;
+
 // RB-02 — only these block an interval. A cancelled booking frees its time.
 export const ACTIVE_STATUSES = ['pending', 'confirmed'];
 
@@ -100,6 +102,26 @@ export function serviceFieldsProblem({ durationMin, price }) {
         if (!Number.isFinite(price) || price < 0) {
             return 'Prețul trebuie să fie un număr mai mare sau egal cu 0.';
         }
+    }
+    return null;
+}
+
+// Registration input, checked in two places for two different reasons:
+//   · register.html calls it per field, so the user is told as they type
+//   · addUser calls it before creating anything, because Pas 2.3 is explicit that the server
+//     validates "indiferent ce a validat clientul" — the form is politeness, not a guarantee
+//
+// Returns null when everything is acceptable, otherwise a ready-to-show message. Returning the
+// message rather than a boolean means the wording exists once; the form does not restate it.
+export function registrationProblem({ fullName, email, password }) {
+    if (!fullName || !fullName.trim()) {
+        return 'Numele este obligatoriu.';
+    }
+    if (!/^\S+@\S+\.\S+$/.test(email ?? '')) {
+        return 'Emailul nu este valid.';
+    }
+    if ((password ?? '').length < MIN_PASSWORD_LENGTH) {
+        return `Parola trebuie să aibă cel puțin ${MIN_PASSWORD_LENGTH} caractere.`;
     }
     return null;
 }
