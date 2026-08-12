@@ -113,17 +113,37 @@ export function serviceFieldsProblem({ durationMin, price }) {
 //
 // Returns null when everything is acceptable, otherwise a ready-to-show message. Returning the
 // message rather than a boolean means the wording exists once; the form does not restate it.
+// One validator per field, so the form can check a single input as the user leaves it, and show
+// every problem at once — rather than revealing them one at a time, which turns a four-field
+// form into four rounds of guessing.
+export function fullNameProblem(fullName) {
+    return (fullName ?? '').trim() ? null : 'Numele este obligatoriu.';
+}
+
+// Deliberately loose. Validating an email properly with a regex is impossible — the only real
+// test is sending a message to it. This catches a missing @ or domain without rejecting the
+// valid oddities that stricter patterns get wrong.
+export function emailProblem(email) {
+    return /^\S+@\S+\.\S+$/.test(email ?? '') ? null : 'Emailul nu este valid.';
+}
+
+export function passwordProblem(password) {
+    return (password ?? '').length >= MIN_PASSWORD_LENGTH
+        ? null
+        : `Parola trebuie să aibă cel puțin ${MIN_PASSWORD_LENGTH} caractere.`;
+}
+
+// The whole payload, for the writer. Returns { field, message } so the caller can point at the
+// offending input, or null when everything is acceptable. addUser uses only the message; the
+// form uses the three validators above directly, one per input.
 export function registrationProblem({ fullName, email, password }) {
-    if (!fullName || !fullName.trim()) {
-        return 'Numele este obligatoriu.';
-    }
-    if (!/^\S+@\S+\.\S+$/.test(email ?? '')) {
-        return 'Emailul nu este valid.';
-    }
-    if ((password ?? '').length < MIN_PASSWORD_LENGTH) {
-        return `Parola trebuie să aibă cel puțin ${MIN_PASSWORD_LENGTH} caractere.`;
-    }
-    return null;
+    const found = [
+        ['fullName', fullNameProblem(fullName)],
+        ['email', emailProblem(email)],
+        ['password', passwordProblem(password)],
+    ].find(([, message]) => message);
+
+    return found ? { field: found[0], message: found[1] } : null;
 }
 
 // RB-05 — the client may cancel only more than 24h before the start, and only a booking that is

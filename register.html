@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Creează cont</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a class="logo" href="index.html">BookEasy<span>Aura Beauty Studio</span></a>
+
+      <nav class="nav" id="site-nav" aria-label="Cont">
+        <a class="btn btn--ghost" href="index.html">← Înapoi la servicii</a>
+        <span class="nav__auth" id="auth-nav"></span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="panel" aria-labelledby="register-title">
+      <h1 id="register-title">Creează cont</h1>
+      <p class="muted">Ai nevoie de un cont ca să poți rezerva.</p>
+      <form id="register-form" novalidate>
+
+        <div class="field">
+          <label for="fullName">Nume complet</label>
+          <input id="fullName" name="fullName" type="text" autocomplete="name" required>
+          <p class="field__error" data-error-for="fullName" hidden></p>
+        </div>
+
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required>
+          <p class="field__error" data-error-for="email" hidden></p>
+        </div>
+
+        <div class="field">
+          <label for="password">Parolă</label>
+          <input id="password" name="password" type="password" autocomplete="new-password" required>
+          <p class="hint">Minim 8 caractere.</p>
+          <p class="field__error" data-error-for="password" hidden></p>
+        </div>
+
+        <div class="field">
+          <label for="passwordConfirm">Confirmă parola</label>
+          <input id="passwordConfirm" name="passwordConfirm" type="password" autocomplete="new-password" required>
+          <p class="field__error" data-error-for="passwordConfirm" hidden></p>
+        </div>
+
+        <p class="form-error" id="form-error" role="alert" hidden></p>
+
+        <button class="btn btn--primary" type="submit">Creează contul</button>
+      </form>
+
+      <p class="swap muted">Ai deja cont? <a href="login.html">Autentifică-te</a></p>
+    </section>
+  </main>
+
+  <script type="module" src="js/register.js"></script>
+</body>
+</html>

@@ -227,6 +227,76 @@ const bookings = [
 ];
 
 
+// ── Persistence ──────────────────────────────────────────────────────────────
+// Every page load re-imports this file, which rebuilds the tables above from the seed. So
+// without this block a user who registered on register.html would not exist by the time
+// index.html loaded, and a booking made in 1.3 would be gone before account.html could show it.
+//
+// That would make the Partea 1 checkpoint impossible: register → login → rezervare → cont →
+// admin is five pages, and therefore five module reloads.
+//
+// So the mutable tables are mirrored into localStorage. It stays INSIDE this module — no page
+// knows storage exists — and it dies with the file in Partea 3, when the data genuinely lives
+// on a server and every page load fetches it fresh over HTTP.
+//
+// employees and employeeServices are absent on purpose: nothing can change them yet. Add them
+// here the day an admin screen can.
+// smoke-test.html sets window.__BOOKEASY_TEST__ in a plain <script> before its module runs, so
+// the tests read and write their own storage. Without this they share one key with the app, and
+// a test run leaves behind its fixtures — services called "Test", deactivated rows, edited
+// working hours — which then show up on the landing page as if they were real data.
+const TEST_MODE = globalThis.__BOOKEASY_TEST__ === true;
+const STATE_KEY = TEST_MODE ? 'bookeasy.test.state' : 'bookeasy.state';
+
+const TABLES = { users, services, bookings, workingHours };
+
+function saveState() {
+    try {
+        // seededOn stamps which day the fixtures were generated for. The seed is built from
+        // offsets relative to today, so state kept overnight would describe yesterday's week —
+        // "tomorrow at 10:00" would quietly become today, or the past.
+        localStorage.setItem(STATE_KEY, JSON.stringify({ seededOn: TODAY, ...TABLES }));
+    } catch { /* storage unavailable — the mock simply stops persisting */ }
+}
+
+function loadState() {
+    try {
+        const raw = localStorage.getItem(STATE_KEY);
+        if (!raw) return;
+
+        const saved = JSON.parse(raw);
+        if (saved.seededOn !== TODAY) return;      // stale fixtures: fall back to a fresh seed
+
+        // The tables are const, so they are refilled in place rather than reassigned. Every
+        // query below closes over these exact arrays.
+        for (const [name, table] of Object.entries(TABLES)) {
+            if (Array.isArray(saved[name])) table.splice(0, table.length, ...saved[name]);
+        }
+    } catch { /* corrupt or unreadable — keep the seed */ }
+}
+
+// A pristine copy of the fixtures, taken BEFORE anything saved is restored over them. Deep, so
+// that later edits to a row cannot reach back and change the copy.
+const SEED = structuredClone(TABLES);
+
+// Throws away everything written since the seed and logs out. The smoke test calls it first so
+// every run starts from identical data, and it is the quickest way to undo a mess by hand:
+//
+//   import('./js/mock-data.js').then(m => m.resetMockData())
+//
+// It rebuilds the tables in memory rather than reloading the page — a reset that reloaded would
+// send the smoke test into an endless loop.
+export function resetMockData() {
+    for (const [name, table] of Object.entries(TABLES)) {
+        table.splice(0, table.length, ...structuredClone(SEED[name]));
+    }
+    setCurrentUserId(null);
+    saveState();
+}
+
+loadState();
+
+
 // ── Simulated session ────────────────────────────────────────────────────────
 // A module variable alone is not enough: every page load re-imports this file with fresh state,
 // so a user who logged in on index.html-css would arrive at service.html-css as a visitor. Pasul 1.2
@@ -237,7 +307,7 @@ const bookings = [
 // JavaScript cannot read at all. That is the upgrade — right now anyone can open DevTools and
 // write bookeasy.userId = 1 to become the admin, and no amount of client code can prevent it.
 // A session cookie cannot be forged that way.
-const SESSION_KEY = 'bookeasy.userId';
+const SESSION_KEY = TEST_MODE ? 'bookeasy.test.userId' : 'bookeasy.userId';
 
 function readStoredUserId() {
     try {
@@ -458,6 +528,7 @@ export function updateWorkingHours(week) {
         });
     });
 
+    saveState();
     return getAllWorkingHours();
 }
 
@@ -595,7 +666,7 @@ export function addUser({ fullName, email, password }) {
     // Pas 2.3: the server validates whatever the client validated. Checked before the duplicate
     // lookup, so a malformed email is reported as malformed rather than as "already taken".
     const problem = registrationProblem({ fullName, email, password });
-    if (problem) throw new ApiError('INVALID_REGISTRATION', problem, 422);
+    if (problem) throw new ApiError('INVALID_REGISTRATION', problem.message, 422);
 
     if (getUserByEmail(email)) {
         throw new ApiError('EMAIL_TAKEN', 'Acest email este deja folosit.', 409);
@@ -609,6 +680,7 @@ export function addUser({ fullName, email, password }) {
         createdAt: new Date().toISOString(),
     };
     users.push(user);
+    saveState();
 
     // Pas 2.3: register "creează sesiunea" — you are logged in as soon as the account exists.
     // Doing it here rather than in register.html-css keeps the page's flow identical in Partea 3,
@@ -746,6 +818,7 @@ export function addBooking({ userId, serviceId, employeeId, startsAt }) {
         cancelledAt: null,
     };
     bookings.push(booking);
+    saveState();
     return clone(booking);
 }
 
@@ -759,6 +832,7 @@ export function cancelBooking(id) {
     if (!booking) throw new ApiError('NOT_FOUND', 'Rezervarea nu există.', 404);
     booking.status = 'cancelled';
     booking.cancelledAt = new Date().toISOString();
+    saveState();
 }
 
 // PATCH /api/admin/bookings/:id/status — 422 on an invalid transition (Pas 2.6).
@@ -778,6 +852,7 @@ export function setBookingStatus(id, status) {
 
     booking.status = status;
     if (status === 'cancelled') booking.cancelledAt = new Date().toISOString();
+    saveState();
     return clone(booking);
 }
 
@@ -836,6 +911,7 @@ export function addService(data) {
         createdAt: new Date().toISOString(),
     };
     services.push(service);
+    saveState();
     return clone(service);
 }
 
@@ -844,6 +920,7 @@ export function updateService(id, data) {
     const service = services.find(s => s.id === Number(id));
     if (!service) throw new ApiError('NOT_FOUND', 'Serviciul nu există.', 404);
     Object.assign(service, normalizeService(data));
+    saveState();
     return clone(service);
 }
 
@@ -853,4 +930,5 @@ export function deactivateService(id) {
     const service = services.find(s => s.id === Number(id));
     if (!service) throw new ApiError('NOT_FOUND', 'Serviciul nu există.', 404);
     service.isActive = false;
+    saveState();
 }

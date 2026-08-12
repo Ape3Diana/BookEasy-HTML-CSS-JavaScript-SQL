@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Autentificare</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header class="site-header">
+        <div class="container site-header__inner">
+            <a class="logo" href="index.html">BookEasy<span>Aura Beauty Studio</span></a>
+
+            <nav class="nav" id="site-nav" aria-label="Cont">
+                <a class="btn btn--ghost" href="index.html">← Înapoi la servicii</a>
+                <span class="nav__auth" id="auth-nav"></span>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="panel" aria-labelledby="login-title">
+            <h1 id="login-title">Autentificare</h1>
+            <p class="muted">Intră în cont ca să vezi și să faci rezervări.</p>
+
+            <form id="login-form" novalidate>
+
+                <div class="field">
+                    <label for="email">Email</label>
+                    <input id="email" name="email" type="email" autocomplete="email" required>
+                    <p class="field__error" data-error-for="email" hidden></p>
+                </div>
+
+                <div class="field">
+                    <label for="password">Parolă</label>
+                    <input id="password" name="password" type="password" autocomplete="current-password" required>
+                    <p class="field__error" data-error-for="password" hidden></p>
+                </div>
+
+                <p class="form-error" id="form-error" role="alert" hidden></p>
+
+                <button class="btn btn--primary" type="submit">Intră în cont</button>
+            </form>
+
+            <p class="swap muted">Nu ai cont? <a href="register.html">Înregistrează-te</a></p>
+        </section>
+    </main>
+
+
+    <script type="module" src="js/login.js"></script>
+</body>
+</html>
