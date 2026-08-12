@@ -168,8 +168,8 @@ returns the shape the API will return.</p>
     <td>The day agenda, chronological. Defaults to today / all / all. Empty string = all.</td><td><span class="tag t-ok">ok</span></td></tr>
 <tr><td><code>PATCH /api/admin/bookings/:id/status</code></td><td>A</td><td><code>setBookingStatus(id, status)</code></td>
     <td>Applies RB-06. Throws <code>INVALID_TRANSITION</code> 422, <code>NOT_FOUND</code> 404.</td><td><span class="tag t-ok">ok</span></td></tr>
-<tr><td><code>GET /api/admin/working-hours</code></td><td>A</td><td><code>getAllWorkingHours()</code></td>
-    <td>All seven days, sorted.</td><td><span class="tag t-ok">ok</span></td></tr>
+<tr><td><code>GET /api/working-hours</code> <span class="tag t-warn">added</span></td><td>—</td><td><code>getAllWorkingHours()</code></td>
+    <td>All seven days, sorted. <b>Public</b>: the programme is in the footer of every page, shown to visitors. Anexa B only had the admin route, which would 403 for them.</td><td><span class="tag t-ok">ok</span></td></tr>
 <tr><td><code>PUT /api/admin/working-hours</code></td><td>A</td><td><code>updateWorkingHours(week)</code></td>
     <td>Replaces the whole week.</td><td><span class="tag t-ok">ok</span></td></tr>
 <tr><td><code>GET /api/admin/stats?from=&amp;to=</code></td><td>A</td><td><code>getStats(from, to)</code></td>
@@ -306,6 +306,8 @@ became visible once something started passing real input.
       employees from working the same hour. It has to become <code>UNIQUE(employee_id, slot_starts_at)</code>.</li>
   <li><b>The two added service endpoints</b> — <code>GET /api/admin/services</code> and
       <code>GET /api/services/:id</code> — are missing from Anexa B.</li>
+  <li><b><code>GET /api/working-hours</code> (public)</b> — Anexa B only has the admin route, but
+      the footer shows the programme to visitors.</li>
   <li><b>The two added employee endpoints</b> — <code>GET /api/employees</code> and
       <code>GET /api/services/:id/employees</code>.</li>
   <li><b>Pagination envelope</b> field names: <code>items / total / page / pageSize</code>.</li>

@@ -12,7 +12,7 @@
 //                                           Fields: startsAt, endsAt, createdAt, cancelledAt.
 //   date key   '2026-08-06'                 a LOCAL calendar day. Exactly what
 //                                           <input type="date"> hands you, and what the
-//                                           day-picker in service.html produces.
+//                                           day-picker in service.html-css produces.
 //
 // The functions below are the ONLY place where one is turned into the other. Rule for the rest
 // of the app: if you catch yourself writing .slice(0, 10) or new Date('2026-08-06') anywhere

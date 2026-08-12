@@ -42,7 +42,7 @@ export function isActiveStatus(status) {
     return ACTIVE_STATUSES.includes(status);
 }
 
-// RB-06 — used by admin.html to decide which buttons to render, and by setBookingStatus to
+// RB-06 — used by admin.html-css to decide which buttons to render, and by setBookingStatus to
 // refuse the transition if they are rendered anyway.
 export function canTransition(from, to) {
     return ALLOWED_TRANSITIONS[from]?.includes(to) ?? false;
