@@ -5,7 +5,7 @@
 
 import { getActiveServices } from './mock-data.js';
 import { formatPrice, formatDuration } from './format.js';
-import { renderFooterHours } from './layout.js';
+import { initLayout } from './layout.js';
 
 const list = document.querySelector('#services-list');
 const emptyState = document.querySelector('#services-empty');
@@ -38,5 +38,5 @@ function renderServices() {
     emptyState.hidden = services.length > 0;
 }
 
+initLayout();
 renderServices();
-renderFooterHours();

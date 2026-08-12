@@ -35,6 +35,11 @@
 <div id="summary">running…</div>
 <div id="out"></div>
 
+<!-- A plain <script> runs during parsing, BEFORE any module script — module scripts are
+     deferred. So this flag is set by the time mock-data.js evaluates, which is what lets it
+     choose test-only storage keys and leave the app's own data alone. -->
+<script>window.__BOOKEASY_TEST__ = true;</script>
+
 <script type="module">
 import {
     toDateKey, instantAt, todayKey, addDays, weekdayOf, plusMinutes, minutesOfDay,
@@ -53,11 +58,15 @@ import {
     getActiveEmployees, getEmployeesForService,
     getAllWorkingHours, getWorkingHoursFor, updateWorkingHours,
     getBookingsForUser, getBookingsForDay, getActiveBookingsForDay,
-    getStats, countActiveFutureBookings,
+    getStats, countActiveFutureBookings, resetMockData,
     login, logout, getCurrentUser, addUser,
     addBooking, cancelBooking, setBookingStatus,
     addService, updateService, deactivateService,
 } from './js/mock-data.js';
+
+// The mock now persists writes to localStorage, so a second run would otherwise inherit the
+// users, bookings and services the first run created. Reset first, and every run is identical.
+resetMockData();
 
 const out = document.getElementById('out');
 let passed = 0, failed = 0;
@@ -191,8 +200,14 @@ check('RB-05 refuses a completed booking', () =>
 
 check('registration accepts valid input', () =>
     registrationProblem({ fullName: 'Ana', email: 'a@b.ro', password: 'parola123' }) === null);
-check('registration rejects a 7-character password', () =>
-    typeof registrationProblem({ fullName: 'Ana', email: 'a@b.ro', password: '1234567' }) === 'string');
+check('registration rejects a 7-character password, and says which field', () => {
+    const problem = registrationProblem({ fullName: 'Ana', email: 'a@b.ro', password: '1234567' });
+    return problem?.field === 'password' && typeof problem.message === 'string';
+});
+check('registration names the email field when the email is wrong', () =>
+    registrationProblem({ fullName: 'Ana', email: 'nope', password: 'parola123' })?.field === 'email');
+check('registration names the name field when it is blank', () =>
+    registrationProblem({ fullName: '  ', email: 'a@b.ro', password: 'parola123' })?.field === 'fullName');
 check('MIN_PASSWORD_LENGTH is 8', () => MIN_PASSWORD_LENGTH === 8);
 
 check('service validation accepts 45 min / 90 lei', () =>
@@ -299,7 +314,9 @@ check('getCurrentUser reflects the session', () => getCurrentUser().email === 'd
 check('logout makes you a visitor', () => { logout(); return getCurrentUser() === null; });
 check('the session survives a reload (localStorage)', () => {
     login('diana@mail.com', 'parola123');
-    const stored = localStorage.getItem('bookeasy.userId');
+    // the test-mode key — mock-data namespaces its storage when __BOOKEASY_TEST__ is set,
+    // so the tests cannot clobber the session you are using in the app
+    const stored = localStorage.getItem('bookeasy.test.userId');
     logout();
     return stored === '2';           // a string in storage, a number in the module
 });

@@ -220,6 +220,7 @@ become <code>fetch</code> calls — they disappear from the frontend entirely.</
 <tr><td><code>OUTSIDE_WORKING_HOURS</code></td><td>422</td><td><code>addBooking</code> — RB-02, the service does not fit in the day</td></tr>
 <tr><td><code>INVALID_SERVICE</code></td><td>422</td><td><code>addService</code>, <code>updateService</code> — duration/price/required fields</td></tr>
 <tr><td><code>INVALID_HOURS</code></td><td>422</td><td><code>updateWorkingHours</code> — closing not after opening</td></tr>
+<tr><td><code>INVALID_REGISTRATION</code></td><td>422</td><td><code>addUser</code> — blank name, malformed email, password under 8 characters</td></tr>
 </tbody>
 </table>
 </div>
@@ -230,19 +231,58 @@ mistake rather than something a client could cause — an <code>ApiError</code> 
 the server might return it.</p>
 
 <h2>4b. Module layout</h2>
+<p class="lede">Three layers that survive into Partea 2/3, one that dies, and the page modules.</p>
 <div class="scroll">
 <table>
 <thead><tr><th>File</th><th>Holds</th><th>Imports</th><th>Fate</th></tr></thead>
 <tbody>
-<tr><td><code>date-utils.js</code></td><td>instant ↔ local day conversions</td><td>nothing</td>
+<tr><td><code>js/date-utils.js</code></td><td>instant ↔ local day, minutes-of-day, HH:MM parsing</td><td>nothing</td>
     <td>stays in the frontend, copied to the server</td></tr>
-<tr><td><code>rules.js</code></td><td>Anexa C constants + predicates</td><td>nothing</td>
+<tr><td><code>js/rules.js</code></td><td>Anexa C constants + predicates, service and registration validation</td><td><code>date-utils</code></td>
     <td>moves to the server, stays for UI decisions</td></tr>
-<tr><td><code>mock-data.js</code></td><td>tables + queries</td><td>both of the above</td>
-    <td>deleted, replaced by <code>api.js</code></td></tr>
+<tr><td><code>js/format.js</code></td><td>Romanian display strings: prices, durations, weekday names, opening hours</td><td>nothing</td>
+    <td>frontend only, forever</td></tr>
+<tr><td><code>js/mock-data.js</code></td><td>tables, queries, writers, session, persistence</td><td><code>rules</code>, <code>date-utils</code></td>
+    <td><b>deleted</b>, replaced by <code>api.js</code></td></tr>
+<tr><td><code>js/form.js</code></td><td>showing and clearing validation messages</td><td>nothing</td>
+    <td>frontend only, unchanged</td></tr>
+<tr><td><code>js/layout.js</code></td><td>shared chrome: <code>initLayout()</code> → header + footer programme</td><td><code>mock-data</code>, <code>date-utils</code>, <code>format</code></td>
+    <td>swaps <code>mock-data</code> for <code>api.js</code>, gains <code>await</code></td></tr>
+<tr><td><code>js/index.js</code> · <code>login.js</code> · <code>register.js</code></td><td>one page each</td><td>the above</td>
+    <td>gain <code>await</code> and loading/error states</td></tr>
 </tbody>
 </table>
 </div>
+
+<div class="note">
+<strong>Each renderer checks for its own slot.</strong> <code>renderFooterHours()</code> returns early when the
+page has no <code>#working-hours</code>, so <code>login.html</code> and <code>register.html</code> get a header
+and no footer without a flag saying so. The markup decides what chrome a page has; the page module only says
+<code>initLayout()</code>.
+</div>
+
+<h2>4c. Persistence — the mock's "database file"</h2>
+<p class="lede">Every page load re-imports <code>mock-data.js</code>, which rebuilds the tables from the seed.
+Without persistence a user who registered on one page would not exist on the next — and the Partea 1 checkpoint
+(register → login → rezervare → cont → admin) is five pages, so five reloads.</p>
+<div class="scroll">
+<table>
+<thead><tr><th>Key</th><th>Holds</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>bookeasy.state</code></td><td><code>users</code>, <code>services</code>, <code>bookings</code>, <code>workingHours</code></td>
+    <td>Written after every writer. Carries <code>seededOn</code>; state from another day is discarded, because the
+        fixtures are relative to today and would otherwise rot overnight.</td></tr>
+<tr><td><code>bookeasy.userId</code></td><td>the session</td>
+    <td>Only an id — the role is looked up from the data, never stored. Forgeable in DevTools, which is the
+        point: Pas 2.3 replaces it with an httpOnly cookie.</td></tr>
+<tr><td><code>bookeasy.test.*</code></td><td>the same, for the smoke test</td>
+    <td><code>smoke-test.html</code> sets <code>window.__BOOKEASY_TEST__</code> in a plain <code>&lt;script&gt;</code>
+        (which runs before deferred module scripts), so a test run cannot leave its fixtures in the app's data.</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>employees</code> and <code>employeeServices</code> are deliberately not persisted — nothing can change
+them until an admin screen exists. <code>resetMockData()</code> restores the seed in memory and logs out.</p>
 
 <h2>5. Business rules — where each one is enforced</h2>
 <p class="lede">Most rules have two enforcement points: the UI must not <b>offer</b> the invalid thing, and the
@@ -323,7 +363,7 @@ became visible once something started passing real input.
 <ul>
   <li><b>The slot calculator</b> — pure, its own module, consumed by 1.3 and lifted to the server in 2.5.
       It is the last piece of logic the mock does not have.</li>
-  <li><b>The five pages</b>: index, register/login, service, account, admin.</li>
+  <li><b>Pages</b>: <s>index</s>, <s>register</s>, <s>login</s>, service (1.3), account (1.4), admin (1.5).</li>
   <li><b>The admin agenda needs an <em>Angajat</em> column</b> — the coordinator's mockup predates employees.</li>
   <li><b>The revenue tile must be relabelled</b> "venit realizat", not "venit estimat".</li>
 </ul>
