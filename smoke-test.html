@@ -38,7 +38,7 @@
 <script type="module">
 import {
     toDateKey, instantAt, todayKey, addDays, weekdayOf, plusMinutes, minutesOfDay,
-} from './date-utils.js';
+} from './js/date-utils.js';
 
 import {
     SLOT_MINUTES, MIN_LEAD_MINUTES, MAX_HORIZON_DAYS, CANCEL_WINDOW_HOURS,
@@ -46,7 +46,7 @@ import {
     ACTIVE_STATUSES, ALLOWED_TRANSITIONS,
     isActiveStatus, canTransition, bookingTimeProblem, canClientCancel,
     serviceFitsInDay, isOnSlotBoundary, serviceFieldsProblem,
-} from './rules.js';
+} from './js/rules.js';
 
 import {
     getActiveServices, getAllServices, getServiceById,
@@ -57,7 +57,7 @@ import {
     login, logout, getCurrentUser, addUser,
     addBooking, cancelBooking, setBookingStatus,
     addService, updateService, deactivateService,
-} from './mock-data.js';
+} from './js/mock-data.js';
 
 const out = document.getElementById('out');
 let passed = 0, failed = 0;

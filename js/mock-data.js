@@ -23,14 +23,8 @@ import {
 } from './date-utils.js';
 
 
-// ── Copies, not live rows ────────────────────────────────────────────────────
-// Readers hand out shallow copies. Over the network you receive a snapshot: mutating it changes
-// nothing on the server. Returning live objects would let a page do booking.status = '...' and
-// appear to work, then silently stop working in Partea 3. Copying makes the mock behave like the
-// wire, so the only way to change data is to call a writer.
 const clone = row => (row ? { ...row } : null);
 const cloneAll = rows => rows.map(r => ({ ...r }));
-
 
 // ── Seed data generator ──────────────────────────────────────────────────────
 const TODAY = todayKey();
@@ -54,6 +48,7 @@ const services = [
     { id: 3, name: 'Manichiură',    description: 'Manichiură cu ojă semipermanentă', durationMin: 45,  price: 90,  isActive: true,  createdAt: dayAt(-90, '10:00') },
     { id: 4, name: 'Vopsit + tuns', description: 'Vopsit integral, include tuns', durationMin: 120, price: 320, isActive: true,  createdAt: dayAt(-90, '10:00') },
     { id: 5, name: 'Tratament păr', description: 'Serviciu retras din ofertă',    durationMin: 45,  price: 100, isActive: false, createdAt: dayAt(-90, '10:00') }, // test soft delete
+    //{ id: 6, name: 'Test', description: 'x', durationMin: 30, price: 100, isActive: true, createdAt: dayAt(-90, '10:00') }
 ];
 
 const employees = [
@@ -64,12 +59,6 @@ const employees = [
 ];
 
 // Which employee can perform which service — a LINK TABLE (many-to-many).
-//
-// The obvious alternative, a single employee_id column on services, cannot express reality:
-// two people who both do manicures would need two rows named "Manichiură", each with its own
-// price, and the catalogue would list the service twice. Here "Manichiură" exists once and
-// several employees point at it.
-//
 // In Partea 2 this is a table with a composite primary key (employee_id, service_id) and a
 // foreign key to each side.
 const employeeServices = [
@@ -204,7 +193,7 @@ const bookings = [
         createdAt: dayAt(-2, '16:40'), cancelledAt: null,
     },
 
-    // ── Old bookings for Diana (user 2), so the pager in account.html has a second page ──
+    // ── Old bookings for Diana (user 2), so the pager in account.html-css has a second page ──
     // All in the past and terminal, so they change nothing: they do not block slots (RB-02)
     // and they are not counted as future active bookings (RB-07).
     {
@@ -239,7 +228,7 @@ const bookings = [
 
 // ── Simulated session ────────────────────────────────────────────────────────
 // A module variable alone is not enough: every page load re-imports this file with fresh state,
-// so a user who logged in on index.html would arrive at service.html as a visitor. Pasul 1.2
+// so a user who logged in on index.html-css would arrive at service.html-css as a visitor. Pasul 1.2
 // calls for localStorage precisely for this, and keeping it INSIDE the module means no page ever
 // touches storage — pages only ever call login / logout / getCurrentUser.
 //
@@ -285,7 +274,7 @@ export function getCurrentUser() {
 
 // ── The auth endpoints ───────────────────────────────────────────────────────
 // One function per endpoint, so a page calls login(...) now and api.login(...) in Partea 3.
-// Without these, login.html would compare the password itself — server logic living in a page,
+// Without these, login.html-css would compare the password itself — server logic living in a page,
 // deleted in Partea 3, and teaching the wrong shape while it exists: the client is never the
 // one who decides whether a password is correct.
 
@@ -334,7 +323,7 @@ export class ApiError extends Error {
 // Endpoints the app needs but the documentation does not list.
 //
 //   GET /api/admin/services            A   all services, active and inactive
-//   GET /api/services/:id              —   one service, for service.html?id=3
+//   GET /api/services/:id              —   one service, for service.html-css?id=3
 //
 // Added with the employees change:
 //   GET /api/employees                 —   active employees
@@ -356,7 +345,7 @@ export function getAllServices() {
     return cloneAll([...services].sort((a, b) => a.name.localeCompare(b.name, 'ro')));
 }
 
-// GET /api/services/:id — 404 if it does not exist (service.html?id=999, or a stale link).
+// GET /api/services/:id — 404 if it does not exist (service.html-css?id=999, or a stale link).
 // Throwing rather than returning null also removes a crash: addBooking() used to read
 // service.name off null when handed a bad id from the query string.
 export function getServiceById(id) {
@@ -375,7 +364,7 @@ export function getActiveEmployees() {
         .sort((a, b) => a.fullName.localeCompare(b.fullName, 'ro')));
 }
 
-// GET /api/services/:id/employees — the employee picker on service.html.
+// GET /api/services/:id/employees — the employee picker on service.html-css.
 // In Partea 2 this is the link table joined to employees:
 //   SELECT e.* FROM employees e
 //   JOIN employee_services es ON es.employee_id = e.id
@@ -421,7 +410,14 @@ function getUserByEmail(email) {
     return users.find(u => u.email.toLowerCase() === email.toLowerCase()) ?? null;
 }
 
-// SELECT * FROM working_hours ORDER BY weekday
+// GET /api/working-hours — PUBLIC. SELECT * FROM working_hours ORDER BY weekday
+//
+// Another endpoint missing from Anexa B, which only has GET /api/admin/working-hours
+// (auth A). But the programme is shown in the footer of every page, to visitors who are
+// not logged in — it is the sign on the shop door. In Partea 3 a visitor calling the
+// admin route would get 403 and the footer would be empty for everyone but the admin.
+//
+// Reading the hours is public; only EDITING them is admin (PUT /api/admin/working-hours).
 export function getAllWorkingHours() {
     return cloneAll([...workingHours].sort((a, b) => a.weekday - b.weekday));
 }
@@ -466,7 +462,7 @@ export function updateWorkingHours(week) {
 
 // client's bookings, newest first
 // pageSize 5 so the seed (8 bookings for Diana) actually produces two pages — otherwise the
-// pager in account.html has nothing to exercise. Pas 2.4 asks for a 60+ row seed to prove it.
+// pager in account.html-css has nothing to exercise. Pas 2.4 asks for a 60+ row seed to prove it.
 export function getBookingsForUser(userId, page = 1, pageSize = 5) {
     const all = bookings
         .filter(b => b.userId === Number(userId))
@@ -485,9 +481,9 @@ export function getBookingsForUser(userId, page = 1, pageSize = 5) {
 // All three filters are optional and default to the state the dashboard opens in: today, all
 // statuses, all employees. The page re-calls this on every `change`
 //
-// The filters live HERE, not in admin.html, because in Partea 2 the server applies them
+// The filters live HERE, not in admin.html-css, because in Partea 2 the server applies them
 // (WHERE status = $2 AND employee_id = $3). Filtering in the page would be code you delete in
-// Partea 3; filtering here means admin.html passes the same arguments to the mock now and to
+// Partea 3; filtering here means admin.html-css passes the same arguments to the mock now and to
 // api.getAdminBookings(...) later.
 //
 // An empty string counts as "all", because that is what a <select> whose "Toate" option has
@@ -609,7 +605,7 @@ export function addUser({ fullName, email, password }) {
     users.push(user);
 
     // Pas 2.3: register "creează sesiunea" — you are logged in as soon as the account exists.
-    // Doing it here rather than in register.html keeps the page's flow identical in Partea 3,
+    // Doing it here rather than in register.html-css keeps the page's flow identical in Partea 3,
     // where the server sets the cookie and the page just redirects.
     setCurrentUserId(user.id);
     return getCurrentUser();   // same shape as login() and /auth/me — never includes password
@@ -760,7 +756,7 @@ export function cancelBooking(id) {
 }
 
 // PATCH /api/admin/bookings/:id/status — 422 on an invalid transition (Pas 2.6).
-// admin.html asks canTransition() to decide which buttons to render; this asks the same
+// admin.html-css asks canTransition() to decide which buttons to render; this asks the same
 // function to refuse anything that gets through anyway. Both layers, one rule.
 export function setBookingStatus(id, status) {
     const booking = bookings.find(b => b.id === Number(id));

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BookEasy Home</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <header class="site-header">
+        <div class="container site-header__inner">
+            <a class="logo" href="index.html">BookEasy<span>Aura Beauty Studio</span></a>
+
+            <nav class="nav" id="site-nav" aria-label="Cont">
+                <a class="btn" href="login.html">Autentificare</a>
+                <a class="btn btn--primary" href="register.html">Creează cont</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+
+        <section class="hero">
+            <h1>Rezervă-ți locul în câteva clickuri</h1>
+            <p>Alege serviciul, vezi orele libere în timp real și programează-te fără niciun telefon. Ne găsiți în centrul orașului.</p>
+            <a class="btn btn--primary" href="#servicii">Vezi serviciile</a>
+        </section>
+        
+        <section id="servicii" aria-labelledby="servicii-title">
+            <h2 id="servicii-title">Serviciile noastre</h2>
+            <p class="muted">Alege un serviciu ca să vezi orele disponibile.</p>
+
+            <ul class="cards" id="services-list"></ul>
+
+            <p class="empty-state" id="services-empty" hidden>
+                Momentan nu există servicii disponibile.
+            </p>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+    <div class="container site-footer__inner">
+        <div>
+            <strong>Aura Beauty Studio</strong>
+            <p class="muted">Programări online, fără niciun telefon.</p>
+        </div>
+
+        <div>
+            <h2 class="site-footer__title">Program</h2>
+            <dl class="hours" id="working-hours"></dl>
+        </div>
+    </div>
+    </footer>
+
+    <template id="service-card">
+        <li class="card">
+            <h3 data-name></h3>
+            <p class="card__description" data-description></p>
+            <p class="card__meta num">
+                <span data-duration></span> · <span data-price></span>
+            </p>
+            <a class="btn btn--primary" data-book>Rezervă</a>
+        </li>
+    </template>
+
+    <script type="module" src="js/index.js"></script>
+</body>
+</html>
