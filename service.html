@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Services</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a class="logo" href="index.html">BookEasy<span>Aura Beauty Studio</span></a>
+
+      <nav class="nav" id="site-nav" aria-label="Cont">
+        <a class="btn btn--ghost" href="index.html">← Înapoi la servicii</a>
+        <span class="nav__auth" id="auth-nav"></span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+      <p class="empty-state" id="service-missing" hidden>
+          Serviciul nu există sau nu mai este disponibil.
+          <a href="index.html">Vezi serviciile disponibile</a>.
+      </p>
+
+      <div class="booking" id="booking" hidden>
+
+          <aside class="booking__service">
+              <h1 id="service-name"></h1>
+              <p class="muted" id="service-description"></p>
+
+              <dl class="detail">
+                  <dt>Durată</dt> <dd class="num" id="service-duration"></dd>
+                  <dt>Preț</dt>   <dd class="num" id="service-price"></dd>
+              </dl>
+          </aside>
+
+          <div class="booking__picker">
+
+              <!-- 1 · who -->
+              <section aria-labelledby="employee-title">
+                  <h2 id="employee-title">Alege specialistul</h2>
+                  <div class="chips" id="employee-picker" role="group" aria-labelledby="employee-title"></div>
+                  <p class="empty-state" id="employees-empty" hidden>
+                      Momentan nimeni nu efectuează acest serviciu.
+                  </p>
+              </section>
+
+              <!-- 2 · when — the next 14 days -->
+              <section aria-labelledby="day-title">
+                  <h2 id="day-title">Alege ziua</h2>
+                  <div class="days" id="day-picker" role="group" aria-labelledby="day-title"></div>
+              </section>
+
+              <!-- 3 · what time -->
+              <section aria-labelledby="slot-title">
+                  <h2 id="slot-title">Ore disponibile</h2>
+
+                  <!-- three different situations, three different messages: no specialist chosen yet,
+                       a grid of free hours, or a day with nothing left -->
+                  <p class="muted" id="slots-hint">Alege întâi un specialist.</p>
+                  <div class="slots" id="slot-grid" role="group" aria-labelledby="slot-title" hidden></div>
+                  <p class="empty-state" id="slots-empty" hidden>
+                      Nu sunt ore libere în ziua selectată. Încearcă altă zi.
+                  </p>
+              </section>
+
+              <!-- booking failures land here: SLOT_TAKEN, TOO_MANY_BOOKINGS, TOO_SOON… -->
+              <p class="form-error" id="booking-error" role="alert" hidden></p>
+
+        <!-- role="status" rather than "alert": success is announced politely, without
+             interrupting whatever a screen reader is currently reading. -->
+        <p class="form-success" id="booking-success" role="status" hidden></p>
+
+              <!-- appears once a slot is chosen. The summary is the same either way; only the action
+                   differs, so a visitor still sees exactly what they would be booking. -->
+              <div class="confirm" id="confirm-panel" hidden>
+                  <p id="confirm-summary"></p>
+
+                  <button class="btn btn--primary" type="button" id="confirm-button">
+                      Confirmă rezervarea
+                  </button>
+
+                  <a class="btn btn--primary" id="confirm-login" href="login.html" hidden>
+                      Autentifică-te ca să rezervi
+                  </a>
+              </div>
+
+          </div>
+      </div>
+  </main>
+
+  <footer class="site-footer">
+      <div class="container site-footer__inner">
+          <div>
+              <strong>Aura Beauty Studio</strong>
+              <p class="muted">Programări online, fără niciun telefon.</p>
+          </div>
+
+          <div>
+              <h2 class="site-footer__title">Program</h2>
+              <dl class="hours" id="working-hours"></dl>
+          </div>
+      </div>
+  </footer>
+
+  <!-- Repeated shapes, cloned by service.js. Everything is a <button type="button">: these are
+       actions on this page, not navigation, and buttons come with keyboard support for free. -->
+  <template id="employee-option">
+      <button class="chip" type="button" data-employee></button>
+  </template>
+
+  <template id="day-option">
+      <button class="day" type="button" data-day>
+          <small data-weekday></small>
+          <span class="num" data-date></span>
+      </button>
+  </template>
+
+  <template id="slot-option">
+      <button class="slot num" type="button" data-slot></button>
+  </template>
+
+  <script type="module" src="js/service.js"></script>
+</body>
+</html>

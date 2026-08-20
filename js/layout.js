@@ -9,7 +9,7 @@ export function initLayout({ showAuthLinks = true } = {}) {
     renderFooterHours();
 }
 
-export function renderFooterHours() {
+function renderFooterHours() {
     const hoursList = document.querySelector('#working-hours');
     if (!hoursList) return;
 
@@ -40,7 +40,7 @@ export function renderFooterHours() {
 
 // showAuthLinks: false on login.html and register.html — a visitor already there
 // does not need a button pointing at the page they are looking at.
-export function renderHeader({ showAuthLinks = true } = {}) {
+function renderHeader({ showAuthLinks = true } = {}) {
     const slot = document.querySelector('#auth-nav');
     if (!slot) return;
 
@@ -53,7 +53,7 @@ export function renderHeader({ showAuthLinks = true } = {}) {
         nodes.push(greeting);
 
         // The admin link is hidden from clients as a courtesy. admin.html checks the
-        // role itself, and in Partea 3 the server answers 403 — hiding is never the guard.
+        // role itself, and in Partea 3 the server answers 403
         if (user.role === 'admin') {
             nodes.push(link('Panou admin', 'admin.html', 'btn btn--ghost'));
         }

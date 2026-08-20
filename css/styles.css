@@ -372,6 +372,15 @@ section > .muted {
     margin-block: var(--space-3);
 }
 
+.form-success {
+    color: var(--ok);
+    background: var(--ok-bg);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    margin-block: var(--space-3);
+    font-size: 14px;
+}
+
 .hint {
     color: var(--ink-soft);
     font-size: 13px;
@@ -383,4 +392,179 @@ section > .muted {
 .swap { margin-top: var(--space-3); text-align: center; font-size: 14px; }
 
 
+/* SERVICE */
+.booking {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: var(--space-6);
+    align-items: start;
+}
+
+@media (max-width: 760px) {
+    .booking { grid-template-columns: 1fr; gap: var(--space-4); }
+}
+
+.booking__service h1 {
+    font-size: 24px;
+    margin-bottom: var(--space-2);
+}
+
+.booking__service .muted { margin-bottom: var(--space-3); }
+
+/* duration and price — a <dl> of two pairs, so a two-column grid pairs them directly */
+.detail {
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: start;
+    gap: var(--space-1) var(--space-3);
+    margin: 0;
+    font-size: 14px;
+}
+
+.detail dt { color: var(--ink-soft); }
+.detail dd { margin: 0; font-weight: 600; }
+
+.booking__picker {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    min-width: 0;
+}
+
+/* the three step headings are labels, not page titles — body font, not the display serif */
+.booking__picker h2 {
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: var(--space-2);
+}
+
+
+/* ── Step 1 · the specialist ───────────────────────────────────────────────── */
+
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.chip {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    color: inherit;
+    font: inherit;
+    font-size: 14px;
+    padding: 7px 16px;
+    cursor: pointer;
+}
+
+.chip:hover:not(:disabled) { border-color: var(--ink-soft); }
+
+
+/* ── Step 2 · the day ──────────────────────────────────────────────────────── */
+
+.days {
+    display: flex;
+    gap: var(--space-2);
+    overflow-x: auto;
+    padding-bottom: var(--space-2);
+    scrollbar-width: thin;
+}
+
+.day {
+    flex: 0 0 auto;              /* never shrink: each day keeps its width, the strip scrolls */
+    min-width: 62px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: inherit;
+    font: inherit;
+    font-size: 14px;
+    padding: 7px 10px;
+    text-align: center;
+    cursor: pointer;
+}
+
+.day small {
+    display: block;
+    color: var(--ink-soft);
+    font-size: 12px;
+}
+
+.day:hover:not(:disabled) { border-color: var(--ink-soft); }
+
+
+/* ── Step 3 · the hour ─────────────────────────────────────────────────────── */
+
+.slots {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+    gap: var(--space-2);
+}
+
+.slot {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: inherit;
+    font: inherit;
+    font-size: 14px;
+    padding: 9px 0;
+    text-align: center;
+    cursor: pointer;
+}
+
+.slot:hover:not(:disabled) { border-color: var(--ink-soft); }
+
+/* taken: still shown, clearly not choosable. The dashed border and the strike-through say
+   "someone has this" */
+.slot--taken {
+    background: var(--bg);
+    border-style: dashed;
+    color: var(--ink-soft);
+    text-decoration: line-through;
+}
+
+
+/* ── Selected and unavailable, for all three pickers ───────────────────────── */
+
+/* aria-pressed is how a toggle button reports its state to assistive tech, so it doubles as the
+   styling hook. service.js sets one attribute and both the look and the announcement follow —
+   no parallel .is-selected class that could disagree with it. */
+.chip[aria-pressed="true"],
+.day[aria-pressed="true"],
+.slot[aria-pressed="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+}
+
+.day[aria-pressed="true"] small { color: inherit; opacity: .8; }
+
+.chip:disabled,
+.day:disabled,
+.slot:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+
+
+/* ── The confirmation panel ────────────────────────────────────────────────── */
+
+.confirm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+
+    border: 1px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: var(--radius);
+    padding: var(--space-3) var(--space-4);
+}
+
+.confirm p { font-size: 15px; }
 

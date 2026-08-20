@@ -66,6 +66,14 @@ export function minutesFromTime(hhmm) {
     return h * 60 + m;
 }
 
+// minutes since midnight → 'HH:MM'. The inverse of minutesFromTime, needed because the slot
+// calculator counts in minutes but instantAt speaks 'HH:MM'.
+export function timeFromMinutes(minutes) {
+    const h = String(Math.floor(minutes / 60)).padStart(2, '0');
+    const m = String(minutes % 60).padStart(2, '0');
+    return `${h}:${m}`;
+}
+
 // instant → minutes since LOCAL midnight (09:15 becomes 555).
 // That is the unit opening hours are written in, so the slot grid and the rules can compare
 // like with like without either of them parsing a date.

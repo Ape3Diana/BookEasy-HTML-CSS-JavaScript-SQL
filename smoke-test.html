@@ -64,6 +64,9 @@ import {
     addService, updateService, deactivateService,
 } from './js/mock-data.js';
 
+import { calculateAvailableSlots, calculateDaySlots } from './js/availability.js';
+import { timeFromMinutes, minutesFromTime } from './js/date-utils.js';
+
 // The mock now persists writes to localStorage, so a second run would otherwise inherit the
 // users, bookings and services the first run created. Reset first, and every run is identical.
 resetMockData();
@@ -392,6 +395,161 @@ check('a missing employee id throws instead of meaning "everyone"', () => {
 check('Maria has no blocking bookings tomorrow', () =>
     getActiveBookingsForDay(SEED_DAY, MARIA).length === 0);
 
+// ────────────────────────────────────────────────────────── availability
+section('availability — the slot calculator');
+
+// A day far enough ahead that RB-03 never interferes, and long enough to hold a 60 min service.
+const CALC_DAY = [...Array(10).keys()]
+    .map(i => addDays(todayKey(), i + 3))
+    .find(key => {
+        const h = getWorkingHoursFor(weekdayOf(key));
+        return h?.opensAt === '09:00' && h.closesAt === '18:00';
+    });
+const CALC_HOURS = getWorkingHoursFor(weekdayOf(CALC_DAY));
+const at = hhmm => instantAt(CALC_DAY, hhmm);
+const slotsFor = (durationMin, taken = []) =>
+    calculateAvailableSlots({ service: { durationMin }, dateKey: CALC_DAY, hours: CALC_HOURS, taken });
+
+check('a closed day offers nothing', () =>
+    calculateAvailableSlots({ service: { durationMin: 30 }, dateKey: CALC_DAY,
+                              hours: { opensAt: null, closesAt: null } }).length === 0);
+check('null hours offer nothing', () =>
+    calculateAvailableSlots({ service: { durationMin: 30 }, dateKey: CALC_DAY, hours: null }).length === 0);
+
+check('an empty day starts at opening time', () => slotsFor(30)[0] === at('09:00'));
+check('a 30 min service ends its last slot at closing', () =>
+    slotsFor(30).at(-1) === at('17:30'));
+check('a 60 min service stops an hour earlier', () =>
+    slotsFor(60).at(-1) === at('17:00'));
+check('a 120 min service stops two hours earlier', () =>
+    slotsFor(120).at(-1) === at('16:00'));
+check('slots are 15 minutes apart', () => {
+    const s = slotsFor(30);
+    return new Date(s[1]) - new Date(s[0]) === 15 * 60 * 1000;
+});
+check('every slot lands on the grid', () =>
+    slotsFor(45).every(iso => minutesOfDay(iso) % 15 === 0));
+check('a 9-hour day fits 35 starts for a 30 min service', () =>
+    slotsFor(30).length === 35);          // 09:00 … 17:30
+
+check('a booking removes exactly the slots it covers', () => {
+    const taken = [{ startsAt: at('10:00'), endsAt: at('11:00') }];
+    const free = slotsFor(30, taken);
+    // a 30 min service cannot start at 09:45, 10:00, 10:15, 10:30 or 10:45
+    return !free.includes(at('09:45')) && !free.includes(at('10:00'))
+        && !free.includes(at('10:30')) && !free.includes(at('10:45'));
+});
+check('the slot ending exactly when a booking starts stays free', () =>
+    slotsFor(30, [{ startsAt: at('10:00'), endsAt: at('11:00') }]).includes(at('09:30')));
+check('the slot starting exactly when a booking ends stays free', () =>
+    slotsFor(30, [{ startsAt: at('10:00'), endsAt: at('11:00') }]).includes(at('11:00')));
+check('a longer service is blocked further back', () =>
+    !slotsFor(60, [{ startsAt: at('10:00'), endsAt: at('11:00') }]).includes(at('09:30')));
+check('two bookings both apply', () => {
+    const free = slotsFor(30, [
+        { startsAt: at('10:00'), endsAt: at('11:00') },
+        { startsAt: at('14:00'), endsAt: at('14:30') },
+    ]);
+    return !free.includes(at('10:15')) && !free.includes(at('14:00')) && free.includes(at('12:00'));
+});
+check('a fully booked day offers nothing', () =>
+    slotsFor(30, [{ startsAt: at('09:00'), endsAt: at('18:00') }]).length === 0);
+
+check('RB-03 removes the past — yesterday offers nothing', () => {
+    const key = addDays(todayKey(), -1);
+    return calculateAvailableSlots({
+        service: { durationMin: 30 }, dateKey: key,
+        hours: getWorkingHoursFor(weekdayOf(key)) ?? CALC_HOURS,
+    }).length === 0;
+});
+check('RB-03 removes anything beyond 30 days', () => {
+    const key = addDays(todayKey(), 40);
+    return calculateAvailableSlots({
+        service: { durationMin: 30 }, dateKey: key,
+        hours: getWorkingHoursFor(weekdayOf(key)) ?? CALC_HOURS,
+    }).length === 0;
+});
+check('an injected `now` shrinks today\'s grid', () => {
+    // pretend it is 15:00 on CALC_DAY: only starts from 16:00 survive the 1-hour lead
+    const free = calculateAvailableSlots({
+        service: { durationMin: 30 }, dateKey: CALC_DAY, hours: CALC_HOURS,
+        now: new Date(at('15:00')),
+    });
+    return free[0] === at('16:00');
+});
+
+// calculateDaySlots keeps the busy hours in the list, flagged — that is what lets the grid
+// strike them through. calculateAvailableSlots then filters them out for the API's benefit.
+const daySlotsFor = (durationMin, taken = []) =>
+    calculateDaySlots({ service: { durationMin }, dateKey: CALC_DAY, hours: CALC_HOURS, taken });
+
+check('a busy hour is KEPT, marked unavailable', () => {
+    const slot = daySlotsFor(30, [{ startsAt: at('10:00'), endsAt: at('11:00') }])
+        .find(s => s.startsAt === at('10:00'));
+    return slot !== undefined && slot.available === false;
+});
+check('a free hour is marked available', () =>
+    daySlotsFor(30, [{ startsAt: at('10:00'), endsAt: at('11:00') }])
+        .find(s => s.startsAt === at('12:00'))?.available === true);
+check('the day keeps its full length whatever is booked', () =>
+    daySlotsFor(30, [{ startsAt: at('10:00'), endsAt: at('11:00') }]).length
+    === daySlotsFor(30).length);
+check('a fully booked day still lists every hour, none of them available', () => {
+    const slots = daySlotsFor(30, [{ startsAt: at('09:00'), endsAt: at('18:00') }]);
+    return slots.length === 35 && slots.every(s => !s.available);
+});
+check('exactly the covered hours are unavailable', () => {
+    // 10:00–11:00 booked, 30 min service → 09:45, 10:00, 10:15, 10:30, 10:45 are blocked
+    const blocked = daySlotsFor(30, [{ startsAt: at('10:00'), endsAt: at('11:00') }])
+        .filter(s => !s.available)
+        .map(s => s.startsAt);
+    return String(blocked) === String(['09:45', '10:00', '10:15', '10:30', '10:45'].map(at));
+});
+check('the two views agree: available ones are exactly the free list', () => {
+    const taken = [{ startsAt: at('10:00'), endsAt: at('11:00') }];
+    const fromDay = daySlotsFor(30, taken).filter(s => s.available).map(s => s.startsAt);
+    return String(fromDay) === String(slotsFor(30, taken));
+});
+// A gap too small for the service must not be offered. The candidate start is free itself, but
+// the service RUNS INTO the next booking — which is why the overlap test uses startsAt + duration
+// and not just the start.
+check('a 15 min gap is not offered to a 60 min service', () => {
+    const taken = [
+        { startsAt: at('10:00'), endsAt: at('11:00') },
+        { startsAt: at('11:15'), endsAt: at('12:00') },
+    ];
+    return daySlotsFor(60, taken).find(s => s.startsAt === at('11:00'))?.available === false;
+});
+check('a 15 min gap IS offered to a 15 min service', () => {
+    const taken = [
+        { startsAt: at('10:00'), endsAt: at('11:00') },
+        { startsAt: at('11:15'), endsAt: at('12:00') },
+    ];
+    return daySlotsFor(15, taken).find(s => s.startsAt === at('11:00'))?.available === true;
+});
+check('a 45 min gap fits a 45 min service exactly', () => {
+    const taken = [
+        { startsAt: at('10:00'), endsAt: at('11:00') },
+        { startsAt: at('11:45'), endsAt: at('12:30') },
+    ];
+    return daySlotsFor(45, taken).find(s => s.startsAt === at('11:00'))?.available === true;
+});
+
+check('RB-03 hours are OMITTED, not flagged — the past is not "taken"', () => {
+    const free = calculateDaySlots({
+        service: { durationMin: 30 }, dateKey: CALC_DAY, hours: CALC_HOURS,
+        now: new Date(at('15:00')),
+    });
+    return free[0].startsAt === at('16:00') && free.every(s => s.available);
+});
+check('a closed day lists nothing at all', () =>
+    calculateDaySlots({ service: { durationMin: 30 }, dateKey: CALC_DAY,
+                        hours: { opensAt: null, closesAt: null } }).length === 0);
+
+check('timeFromMinutes is the inverse of minutesFromTime', () =>
+    timeFromMinutes(minutesFromTime('09:15')) === '09:15');
+check('timeFromMinutes pads', () => timeFromMinutes(9 * 60) === '09:00');
+
 // ────────────────────────────────────────────────────────────── stats
 section('stats');
 const ALL_TIME = [addDays(todayKey(), -365), addDays(todayKey(), 365)];
@@ -458,10 +616,21 @@ check('ONE DIARY PER PERSON: a different service still collides', () => {
 
 throws('no session → UNAUTHENTICATED', 'UNAUTHENTICATED',
     () => addBooking({ userId: 9999, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(SLOTDAY, '16:00') }));
+// addBooking checks the salon's hours BEFORE the horizon, and the first failure wins. So these
+// two need days the salon is actually OPEN on, or they get SALON_CLOSED instead of the code they
+// are testing — which is what happens to a hardcoded -1 or +45 whenever the weekday lines up
+// badly. Pick the days from the schedule rather than assuming.
+const openDayAt = offsets => offsets
+    .map(offset => addDays(todayKey(), offset))
+    .find(key => getWorkingHoursFor(weekdayOf(key))?.opensAt <= '10:00');
+
+const pastOpenDay = openDayAt([-1, -2, -3, -4, -5, -6, -7]);
+const farOpenDay = openDayAt([31, 32, 33, 34, 35, 36, 37]);
+
 throws('the past → TOO_SOON', 'TOO_SOON',
-    () => addBooking({ userId: RADU, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(addDays(todayKey(), -1), '10:00') }));
+    () => addBooking({ userId: RADU, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(pastOpenDay, '10:00') }));
 throws('beyond the horizon → TOO_FAR', 'TOO_FAR',
-    () => addBooking({ userId: RADU, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(addDays(todayKey(), 45), '10:00') }));
+    () => addBooking({ userId: RADU, serviceId: HAIR_M, employeeId: ANA, startsAt: instantAt(farOpenDay, '10:00') }));
 
 // find a day the salon is closed, and one where the service cannot fit
 const closedDay = [...Array(8).keys()]

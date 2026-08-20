@@ -9,6 +9,7 @@ import {
     isOnSlotBoundary,
     serviceFieldsProblem,
     registrationProblem,
+    intervalsOverlap,
 } from './rules.js';
 
 // The instant ↔ local-day conversions live in date-utils.js.
@@ -790,8 +791,7 @@ export function addBooking({ userId, serviceId, employeeId, startsAt }) {
     const collides = bookings.some(b =>
         b.employeeId === Number(employeeId) &&
         ACTIVE_STATUSES.includes(b.status) &&
-        new Date(startsAt) < new Date(b.endsAt) &&
-        new Date(endsAt) > new Date(b.startsAt)
+        intervalsOverlap(startsAt, endsAt, b.startsAt, b.endsAt)
     );
     if (collides) {
         throw new ApiError('SLOT_TAKEN', 'Intervalul tocmai a fost rezervat.', 409);

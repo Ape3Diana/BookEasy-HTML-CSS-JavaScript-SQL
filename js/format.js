@@ -1,5 +1,7 @@
 // format.js — turning data into the words a Romanian visitor reads.
 
+import { timeFromMinutes, minutesOfDay } from './date-utils.js';
+
 export function formatPrice(price) {
     return `${price} lei`;
 }
@@ -18,6 +20,27 @@ export function weekdayName(weekday) {
 }
 
 export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+// instant → '09:15', local wall-clock. Goes through the date helpers rather than slicing the
+// ISO string, which would print UTC and be an hour or two wrong all summer.
+export function formatTime(instant) {
+    return timeFromMinutes(minutesOfDay(instant));
+}
+
+// date key → '19 aug'. Intl handles the Romanian month names and their abbreviations, so there
+// is no second list of names to keep in step with WEEKDAY_NAMES.
+export function formatShortDate(dateKey) {
+    const [y, m, d] = dateKey.split('-').map(Number);
+    return new Intl.DateTimeFormat('ro-RO', { day: 'numeric', month: 'short' })
+        .format(new Date(y, m - 1, d));
+}
+
+// date key → 'joi, 20 august' — the long form, for a confirmation line
+export function formatLongDate(dateKey) {
+    const [y, m, d] = dateKey.split('-').map(Number);
+    return new Intl.DateTimeFormat('ro-RO', { weekday: 'long', day: 'numeric', month: 'long' })
+        .format(new Date(y, m - 1, d));
+}
 
 export function formatWorkingHours(row) {
     if (!row || !row.opensAt || !row.closesAt) return 'Închis';

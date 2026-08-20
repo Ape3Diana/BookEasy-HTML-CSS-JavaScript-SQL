@@ -2,11 +2,8 @@
 //
 // Most rules end up with TWO enforcement points: the UI must not OFFER something invalid, and
 // the writer must REFUSE it anyway (a page can be stale, or bypassed entirely). That pairing is
-// the design — see Pas 3.4. What must never be duplicated is the rule itself: change the lead
-// time to 2 hours here, and the slot grid, the cancel button and addBooking all follow.
+// the design — see Pas 3.4.
 //
-// It imports one pure formatting helper and nothing else — in particular never mock-data.js.
-// The moment rules reach for data they stop being liftable to the server as they are.
 import { minutesFromTime } from './date-utils.js';
 
 
@@ -64,20 +61,17 @@ export function bookingTimeProblem(startsAt, now = new Date()) {
 }
 
 // RB-02, second half — does a service starting at `startMinutes` fit ENTIRELY inside the day?
-//
-// Thursday closes at 20:00 and Tuns damă lasts 60 minutes, so 19:00 is the last usable start:
-// 19:15, 19:30 and 19:45 would run past closing and must never be offered.
-//
-// Two callers ask exactly this, which is why it lives here rather than inside either of them:
-//   · the slot grid (1.3) asks it about every candidate start, to decide what to render
-//   · addBooking asks it about the one start it was handed, to refuse anything else
-//
 // It answers only the question — walking the day in 15-minute steps is the calculator's job.
 // Minutes since midnight keeps this free of dates and timezones.
 export function serviceFitsInDay(startMinutes, durationMin, hours) {
     if (!hours || !hours.opensAt || !hours.closesAt) return false;    // closed that day
     return startMinutes >= minutesFromTime(hours.opensAt)
         && startMinutes + durationMin <= minutesFromTime(hours.closesAt);
+}
+
+// RB-02, first half — do two intervals collide?
+export function intervalsOverlap(aStart, aEnd, bStart, bEnd) {
+    return new Date(aStart) < new Date(bEnd) && new Date(aEnd) > new Date(bStart);
 }
 
 // RB-01 — a start must land on the slot grid: :00, :15, :30, :45 and nothing finer.
@@ -120,9 +114,6 @@ export function fullNameProblem(fullName) {
     return (fullName ?? '').trim() ? null : 'Numele este obligatoriu.';
 }
 
-// Deliberately loose. Validating an email properly with a regex is impossible — the only real
-// test is sending a message to it. This catches a missing @ or domain without rejecting the
-// valid oddities that stricter patterns get wrong.
 export function emailProblem(email) {
     return /^\S+@\S+\.\S+$/.test(email ?? '') ? null : 'Emailul nu este valid.';
 }
