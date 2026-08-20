@@ -154,8 +154,8 @@ returns the shape the API will return.</p>
     <td>Who can perform this service — the picker in 1.3. Excludes inactive employees; 404 for a service that is unknown <em>or withdrawn</em>.</td><td><span class="tag t-ok">ok</span></td></tr>
 
 <tr><td colspan="5" style="background:var(--bg);font-weight:600">Availability &amp; bookings</td></tr>
-<tr><td><code>GET /api/availability?serviceId=&amp;employeeId=&amp;date=</code></td><td>—</td><td class="muted">not written</td>
-    <td>The pure slot calculation of Pasul 1.3. Will consume <code>getWorkingHoursFor</code> + <code>getActiveBookingsForDay</code>.</td><td><span class="tag t-bad">missing</span></td></tr>
+<tr><td><code>GET /api/availability?serviceId=&amp;employeeId=&amp;date=</code></td><td>—</td><td><code>calculateAvailableSlots(...)</code><br><span class="muted">in <code>js/availability.js</code></span></td>
+    <td>Free start instants for one service, one employee, one day. Pure — the caller supplies the hours and that employee's bookings, so Pasul 2.5 lifts the file to the server unchanged. <code>calculateDaySlots</code> is the same walk but keeps the busy hours, flagged, for the grid to grey out.</td><td><span class="tag t-ok">ok</span></td></tr>
 <tr><td><code>POST /api/bookings</code></td><td>C</td><td><code>addBooking({userId,serviceId,employeeId,startsAt})</code></td>
     <td>Creates a booking, snapshots the price. Throws <code>TOO_SOON</code>/<code>TOO_FAR</code>/<code>TOO_MANY_BOOKINGS</code> 422, <code>EMPLOYEE_CANNOT_PERFORM</code> 422, <code>SLOT_TAKEN</code> 409.</td><td><span class="tag t-ok">ok</span></td></tr>
 <tr><td><code>GET /api/bookings/my?page=</code></td><td>C</td><td><code>getBookingsForUser(userId, page, pageSize)</code></td>
@@ -244,11 +244,13 @@ the server might return it.</p>
     <td>frontend only, forever</td></tr>
 <tr><td><code>js/mock-data.js</code></td><td>tables, queries, writers, session, persistence</td><td><code>rules</code>, <code>date-utils</code></td>
     <td><b>deleted</b>, replaced by <code>api.js</code></td></tr>
+<tr><td><code>js/availability.js</code></td><td>the slot calculator — walks a day in 15-minute steps</td><td><code>rules</code>, <code>date-utils</code></td>
+    <td><b>moves to the server</b> in 2.5, unchanged</td></tr>
 <tr><td><code>js/form.js</code></td><td>showing and clearing validation messages</td><td>nothing</td>
     <td>frontend only, unchanged</td></tr>
 <tr><td><code>js/layout.js</code></td><td>shared chrome: <code>initLayout()</code> → header + footer programme</td><td><code>mock-data</code>, <code>date-utils</code>, <code>format</code></td>
     <td>swaps <code>mock-data</code> for <code>api.js</code>, gains <code>await</code></td></tr>
-<tr><td><code>js/index.js</code> · <code>login.js</code> · <code>register.js</code></td><td>one page each</td><td>the above</td>
+<tr><td><code>js/index.js</code> · <code>login.js</code> · <code>register.js</code> · <code>service.js</code></td><td>one page each</td><td>the above</td>
     <td>gain <code>await</code> and loading/error states</td></tr>
 </tbody>
 </table>
@@ -292,7 +294,7 @@ writer must <b>refuse</b> it anyway. The rule itself is defined once, in <code>r
 <thead><tr><th>Rule</th><th>Defined in</th><th>UI hides</th><th>Writer refuses</th></tr></thead>
 <tbody>
 <tr><td>RB-01 · 15-minute slots</td><td><code>isOnSlotBoundary</code></td><td>slot grid (1.3)</td><td><code>addBooking</code> ✓</td></tr>
-<tr><td>RB-02 · free time, service fits in the day</td><td><code>ACTIVE_STATUSES</code>, <code>serviceFitsInDay</code></td><td>slot grid (1.3)</td><td><code>addBooking</code> ✓ (overlap + hours)</td></tr>
+<tr><td>RB-02 · free time, service fits in the day</td><td><code>ACTIVE_STATUSES</code>, <code>serviceFitsInDay</code>, <code>intervalsOverlap</code></td><td><code>calculateDaySlots</code> (1.3)</td><td><code>addBooking</code> ✓ (overlap + hours)</td></tr>
 <tr><td>RB-03 · ≥1h ahead, ≤30 days</td><td><code>bookingTimeProblem</code></td><td>slot grid (1.3)</td><td><code>addBooking</code> ✓</td></tr>
 <tr><td>RB-04 · DB guarantees no overlap</td><td>—</td><td>—</td><td><span class="tag t-done">Partea 2</span> composite unique key</td></tr>
 <tr><td>RB-05 · client cancels &gt;24h before</td><td><code>canClientCancel</code></td><td>account.html (1.4)</td><td>admin-only rule, server-side in 2.5</td></tr>
@@ -300,6 +302,21 @@ writer must <b>refuse</b> it anyway. The rule itself is defined once, in <code>r
 <tr><td>RB-07 · max 3 active per client</td><td><code>MAX_ACTIVE_BOOKINGS</code></td><td>—</td><td><code>addBooking</code> ✓</td></tr>
 </tbody>
 </table>
+</div>
+
+<div class="note">
+<strong>Intervals are half-open: <code>[start, end)</code>.</strong> A booking that ends at 12:00 does not
+collide with one starting at 12:00, so appointments can run back to back. Treating the boundary as a clash
+would cost the salon one usable slot after every single appointment. Two smoke-test checks pin it, and it is
+why a 60-minute service is offered at 12:00 when the next booking starts at 13:00 — an exact fit.
+</div>
+
+<div class="note">
+<strong>The grid shows START times, greyed out when unusable.</strong> A slot can be grey for two different
+reasons: the hour is inside an existing booking, or the hour is free but the service would run past the next
+one — a 60-minute service at 09:15 when 10:00 is booked. Both render identically on purpose: "grey means you
+cannot pick it" is one rule a client learns at a glance, where explaining the arithmetic would not help.
+It also means the same day looks different for a 30-minute service than for a 120-minute one.
 </div>
 
 <h2>6. Gaps — all closed</h2>
@@ -361,9 +378,7 @@ became visible once something started passing real input.
 
 <h2>8. Still to build in Partea 1</h2>
 <ul>
-  <li><b>The slot calculator</b> — pure, its own module, consumed by 1.3 and lifted to the server in 2.5.
-      It is the last piece of logic the mock does not have.</li>
-  <li><b>Pages</b>: <s>index</s>, <s>register</s>, <s>login</s>, service (1.3), account (1.4), admin (1.5).</li>
+  <li><b>Pages</b>: <s>index</s>, <s>register</s>, <s>login</s>, <s>service</s>, account (1.4), admin (1.5).</li>
   <li><b>The admin agenda needs an <em>Angajat</em> column</b> — the coordinator's mockup predates employees.</li>
   <li><b>The revenue tile must be relabelled</b> "venit realizat", not "venit estimat".</li>
 </ul>
