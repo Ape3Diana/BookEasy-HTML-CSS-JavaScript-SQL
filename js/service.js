@@ -15,9 +15,10 @@ import {
 import { calculateDaySlots } from './availability.js';
 import { todayKey, addDays, weekdayOf, plusMinutes } from './date-utils.js';
 import {
-    formatPrice, formatDuration, formatTime, formatShortDate, formatLongDate, weekdayName,
+    formatPrice, formatDuration, formatTime, formatShortDate, formatLongDate, weekdayShort,
 } from './format.js';
-import { initLayout } from './layout.js';
+import { initLayout, SESSION_CHANGED } from './layout.js';
+import { showMessage, clearMessages } from './messages.js';
 
 const DAYS_SHOWN = 14;
 
@@ -105,8 +106,7 @@ function renderDays() {
 
         const button = tpl.day.content.firstElementChild.cloneNode(true);
         button.dataset.day = dateKey;
-        button.querySelector('[data-weekday]').textContent =
-            weekdayName(weekdayOf(dateKey)).slice(0, 3).toLowerCase();
+        button.querySelector('[data-weekday]').textContent = weekdayShort(weekdayOf(dateKey));
         button.querySelector('[data-date]').textContent = formatShortDate(dateKey);
         button.disabled = !hours?.opensAt;
         buttons.push(button);
@@ -194,17 +194,17 @@ function render() {
 
 // ── Messages ─────────────────────────────────────────────────────────────────
 
-function clearMessages() {
-    el.error.hidden = true;
-    el.error.textContent = '';
-    el.success.hidden = true;
-    el.success.textContent = '';
-}
+// Error and success share a slot in the user's attention: showing one always hides the other.
+const clearBoth = () => clearMessages(el.error, el.success);
 
 function showError(message) {
-    clearMessages();
-    el.error.textContent = message;
-    el.error.hidden = false;
+    clearBoth();
+    showMessage(el.error, message);
+}
+
+function showSuccess(message) {
+    clearBoth();
+    showMessage(el.success, message);
 }
 
 
@@ -219,7 +219,7 @@ el.employees.addEventListener('click', event => {
 
     state.employeeId = Number(chip.dataset.employee);
     state.startsAt = null;      // that hour may be busy for the new person
-    clearMessages();
+    clearBoth();
     render();
 });
 
@@ -229,7 +229,7 @@ el.days.addEventListener('click', event => {
 
     state.dateKey = button.dataset.day;
     state.startsAt = null;      // the chosen hour belonged to the previous day
-    clearMessages();
+    clearBoth();
     render();
 });
 
@@ -238,7 +238,7 @@ el.slots.addEventListener('click', event => {
     if (!button) return;
 
     state.startsAt = button.dataset.slot;
-    clearMessages();
+    clearBoth();
     render();
 });
 
@@ -254,10 +254,7 @@ el.confirmBtn.addEventListener('click', () => {
             startsAt: state.startsAt,
         });
 
-        clearMessages();
-        el.success.textContent =
-            'Rezervare înregistrată. O găsești în Contul meu, în așteptarea confirmării.';
-        el.success.hidden = false;
+        showSuccess('Rezervare înregistrată. O găsești în Contul meu, în așteptarea confirmării.');
 
         state.startsAt = null;  // the slot is gone from the grid now — nothing stays selected
         render();
@@ -279,6 +276,10 @@ el.confirmBtn.addEventListener('click', () => {
 // ── Start ────────────────────────────────────────────────────────────────────
 
 initLayout();
+
+// Logging out swaps the confirm button for "Autentifică-te ca să rezervi", so this page cares
+// about the session too — just not as much as account.html does.
+document.addEventListener(SESSION_CHANGED, () => render());
 
 const serviceId = new URLSearchParams(location.search).get('id');
 

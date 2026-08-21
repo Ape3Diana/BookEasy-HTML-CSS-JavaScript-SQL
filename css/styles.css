@@ -568,3 +568,92 @@ section > .muted {
 
 .confirm p { font-size: 15px; }
 
+
+/* ACCOUNT */
+
+.b-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+
+    list-style: none;
+    margin: 0 0 var(--space-4);
+    padding: 0;
+    max-width: 780px;
+}
+
+.b-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: var(--space-3);
+}
+
+.b-when {
+    min-width: 148px;            /* keeps the dates in a column when rows sit together */
+}
+
+.b-when b { display: block; }
+.b-when span { font-size: 13px; }
+
+/* takes the leftover width, so the badge and the button are pushed to the right edge */
+.b-what {
+    flex: 1;
+    min-width: 150px;
+}
+
+.b-what small { display: block; font-size: 13px; }
+
+
+/* ── Status badges ─────────────────────────────────────────────────────────── */
+/* Styled by data-status rather than by a class, so account.js sets ONE thing:
+     badge.dataset.status = booking.status
+   The value is the English code from the data; the visible text is the Romanian label from
+   format.js. Code and label stay separate — the same split as <option value="pending">. */
+
+.badge {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 2px 11px;
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.badge[data-status="confirmed"] { background: var(--ok-bg);   color: var(--ok);   }
+.badge[data-status="pending"]   { background: var(--warn-bg); color: var(--warn); }
+.badge[data-status="completed"] { background: var(--done-bg); color: var(--done); }
+.badge[data-status="cancelled"] { background: var(--bad-bg);  color: var(--bad);  }
+
+
+/* ── Destructive action ────────────────────────────────────────────────────── */
+/* Outlined rather than filled: cancelling is available, not encouraged. It fills in on hover,
+   so the commitment is obvious at the moment of clicking. */
+
+.btn--danger {
+    border-color: var(--bad);
+    color: var(--bad);
+    background: transparent;
+}
+
+.btn--danger:hover {
+    background: var(--bad);
+    border-color: var(--bad);
+    color: var(--surface);
+}
+
+
+/* ── Pager ─────────────────────────────────────────────────────────────────── */
+
+.pager {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-size: 14px;
+}
+

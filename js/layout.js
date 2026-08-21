@@ -4,6 +4,13 @@ import { getAllWorkingHours, getCurrentUser, logout } from './mock-data.js';
 import { todayKey, weekdayOf } from './date-utils.js';
 import { weekdayName, formatWorkingHours, WEEK_ORDER } from './format.js';
 
+// Fired on <document> when logging out changes who is looking at the page. Namespaced so it
+// cannot collide with anything the browser or a library dispatches.
+//
+// In Partea 3 the same event still makes sense: api.logout() destroys the session on the server,
+// and every region that shows private data has to redraw.
+export const SESSION_CHANGED = 'bookeasy:session-changed';
+
 export function initLayout({ showAuthLinks = true } = {}) {
     renderHeader({ showAuthLinks });
     renderFooterHours();
@@ -67,6 +74,14 @@ function renderHeader({ showAuthLinks = true } = {}) {
         out.addEventListener('click', () => {
             logout();
             renderHeader({ showAuthLinks });   // re-render, do not reload
+
+            // The header is not the only thing that depends on who is logged in. account.html
+            // is showing someone's bookings; admin.html will be showing the whole agenda. They
+            // have to be told, or they keep displaying private data to nobody.
+            //
+            // An event rather than a direct call, because layout.js must not know which pages
+            // exist — it is imported BY them. Pages that care listen; the rest ignore it.
+            document.dispatchEvent(new CustomEvent(SESSION_CHANGED));
         });
         nodes.push(out);
 
