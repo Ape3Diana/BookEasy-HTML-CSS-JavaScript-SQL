@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Contul meu</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <header class="site-header">
+      <div class="container site-header__inner">
+        <a class="logo" href="index.html">BookEasy<span>Aura Beauty Studio</span></a>
+
+        <nav class="nav" id="site-nav" aria-label="Cont">
+          <a class="btn btn--ghost" href="index.html">← Înapoi la servicii</a>
+          <span class="nav__auth" id="auth-nav"></span>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <p class="empty-state" id="auth-required" hidden>
+        Trebuie să fii autentificat ca să îți vezi rezervările.
+        <a href="login.html">Autentifică-te</a>.
+      </p>
+
+      <section id="account" hidden aria-labelledby="account-title">
+        <h1 id="account-title">Rezervările mele</h1>
+        <p class="muted">Poți anula o rezervare cu cel puțin 24 de ore înainte de ora programată.</p>
+
+        <p class="form-error"   id="account-error"   role="alert"  hidden></p>
+        <p class="form-success" id="account-success" role="status" hidden></p>
+
+        <ul class="b-list" id="bookings-list"></ul>
+
+        <p class="empty-state" id="bookings-empty" hidden>
+          Nu ai nicio rezervare încă.
+          <a href="index.html">Vezi serviciile</a> și programează-te.
+        </p>
+
+        <!-- hidden while everything fits on one page -->
+        <nav class="pager" id="pager" aria-label="Paginare" hidden>
+          <button class="btn" type="button" id="prev-page">← Anterior</button>
+          <span class="muted" id="page-label"></span>
+          <button class="btn" type="button" id="next-page">Următor →</button>
+        </nav>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container site-footer__inner">
+        <div>
+          <strong>Aura Beauty Studio</strong>
+          <p class="muted">Programări online, fără niciun telefon.</p>
+        </div>
+        <div>
+          <h2 class="site-footer__title">Program</h2>
+          <dl class="hours" id="working-hours"></dl>
+        </div>
+      </div>
+    </footer>
+
+    <template id="booking-row">
+      <li class="b-row">
+        <div class="b-when">
+          <b data-date></b>
+          <span class="num muted" data-time></span>
+        </div>
+
+        <div class="b-what">
+          <span data-service></span>
+          <small class="muted" data-employee></small>
+        </div>
+
+        <span class="num" data-price></span>
+        <span class="badge" data-status></span>
+
+        <!-- exactly one of these two is shown: the button when RB-05 allows it, the note when
+             it does not and the booking is still active. A completed booking gets neither. -->
+        <button class="btn btn--danger" type="button" data-cancel hidden>Anulează</button>
+        <small class="muted" data-note hidden></small>
+      </li>
+    </template>
+
+    <script type="module" src="js/account.js"></script>
+</body>
+</html>
