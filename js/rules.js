@@ -4,7 +4,7 @@
 // the writer must REFUSE it anyway (a page can be stale, or bypassed entirely). That pairing is
 // the design — see Pas 3.4.
 //
-import { minutesFromTime } from './date-utils.js';
+import { minutesFromTime, minutesOfDay } from './date-utils.js';
 
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -74,30 +74,65 @@ export function intervalsOverlap(aStart, aEnd, bStart, bEnd) {
     return new Date(aStart) < new Date(bEnd) && new Date(aEnd) > new Date(bStart);
 }
 
+// RB-08 (not in Anexa C — agreed with the client) — does an existing booking still fit inside a
+// proposed schedule?
+//
+// The admin may not shorten a day, or close it, while bookings already sit outside the new
+// hours: the salon would owe appointments it is not open for. Those bookings have to be moved or
+// cancelled first, and only then can the schedule change.
+//
+// This answers it for ONE booking against ONE day's hours. Deciding which bookings to ask about
+// is the caller's job — the same division as serviceFitsInDay.
+export function bookingFitsHours(booking, hours) {
+    if (!hours || !hours.opensAt || !hours.closesAt) return false;   // closed: nothing fits
+    return minutesOfDay(booking.startsAt) >= minutesFromTime(hours.opensAt)
+        && minutesOfDay(booking.endsAt) <= minutesFromTime(hours.closesAt);
+}
+
 // RB-01 — a start must land on the slot grid: :00, :15, :30, :45 and nothing finer.
 export function isOnSlotBoundary(startMinutes) {
     return Number.isInteger(startMinutes) && startMinutes % SLOT_MINUTES === 0;
 }
 
-// Anexa A CHECK, expressed once. Returns null when the values are acceptable, otherwise a
-// message for the admin form. The form shows it under the field; addService/updateService
-// refuse with it — and in Partea 2 the CHECK constraint refuses regardless of both.
-export function serviceFieldsProblem({ durationMin, price }) {
-    if (durationMin !== undefined) {
-        if (!Number.isInteger(durationMin)
-            || durationMin < MIN_SERVICE_MINUTES
-            || durationMin > MAX_SERVICE_MINUTES
-            || durationMin % SLOT_MINUTES !== 0) {
-            return `Durata trebuie să fie între ${MIN_SERVICE_MINUTES} și ${MAX_SERVICE_MINUTES}`
-                 + ` minute, multiplu de ${SLOT_MINUTES}.`;
-        }
-    }
-    if (price !== undefined) {
-        if (!Number.isFinite(price) || price < 0) {
-            return 'Prețul trebuie să fie un număr mai mare sau egal cu 0.';
-        }
+// One validator per field, so the admin form can put each message under the input it belongs to.
+// Anexa A's CHECK constraints, expressed once — the form shows them, addService/updateService
+// refuse with them, and in Partea 2 the database refuses regardless of both.
+export function durationProblem(durationMin) {
+    if (durationMin === undefined) return null;      // absent = leave it alone (partial update)
+    if (!Number.isInteger(durationMin)
+        || durationMin < MIN_SERVICE_MINUTES
+        || durationMin > MAX_SERVICE_MINUTES
+        || durationMin % SLOT_MINUTES !== 0) {
+        return `Durata trebuie să fie între ${MIN_SERVICE_MINUTES} și ${MAX_SERVICE_MINUTES}`
+             + ` minute, multiplu de ${SLOT_MINUTES}.`;
     }
     return null;
+}
+
+export function priceProblem(price) {
+    if (price === undefined) return null;
+    return Number.isFinite(price) && price >= 0
+        ? null
+        : 'Prețul trebuie să fie un număr mai mare sau egal cu 0.';
+}
+
+export function serviceNameProblem(name) {
+    if (name === undefined) return null;
+    return (name ?? '').trim() ? null : 'Numele este obligatoriu.';
+}
+
+// The whole payload, for the writer. Returns { field, message } — the same shape as
+// registrationProblem — so a caller can point at the offending input instead of guessing from
+// the wording. Branching on the message text is exactly what the code/message split exists to
+// prevent.
+export function serviceFieldsProblem({ name, durationMin, price } = {}) {
+    const found = [
+        ['name', serviceNameProblem(name)],
+        ['durationMin', durationProblem(durationMin)],
+        ['price', priceProblem(price)],
+    ].find(([, message]) => message);
+
+    return found ? { field: found[0], message: found[1] } : null;
 }
 
 // Registration input, checked in two places for two different reasons:

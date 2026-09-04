@@ -173,7 +173,7 @@ returns the shape the API will return.</p>
 <tr><td><code>PUT /api/admin/working-hours</code></td><td>A</td><td><code>updateWorkingHours(week)</code></td>
     <td>Replaces the whole week.</td><td><span class="tag t-ok">ok</span></td></tr>
 <tr><td><code>GET /api/admin/stats?from=&amp;to=</code></td><td>A</td><td><code>getStats(from, to)</code></td>
-    <td>One object: <code>{revenue, bookings, byStatus, topServices, from, to}</code>. Revenue is <code>completed</code> only, summing the price snapshot — so realised, never a forecast. <code>bookings</code> excludes cancelled. Defaults to today.</td><td><span class="tag t-ok">ok</span></td></tr>
+    <td>One object: <code>{revenue, active, byStatus, topServices, from, to}</code>, plus <code>getOccupancy(dateKey)</code> for the fourth tile. Revenue is <code>completed</code> only, summing the price snapshot — so realised, never a forecast. <code>bookings</code> excludes cancelled. Defaults to today.</td><td><span class="tag t-ok">ok</span></td></tr>
 </tbody>
 </table>
 </div>
@@ -221,6 +221,8 @@ become <code>fetch</code> calls — they disappear from the frontend entirely.</
 <tr><td><code>INVALID_SERVICE</code></td><td>422</td><td><code>addService</code>, <code>updateService</code> — duration/price/required fields</td></tr>
 <tr><td><code>INVALID_HOURS</code></td><td>422</td><td><code>updateWorkingHours</code> — closing not after opening</td></tr>
 <tr><td><code>INVALID_REGISTRATION</code></td><td>422</td><td><code>addUser</code> — blank name, malformed email, password under 8 characters</td></tr>
+<tr><td><code>ADMIN_CANNOT_BOOK</code></td><td>403</td><td><code>addBooking</code> — an admin account has admin duties only. 403, not 401: they <em>are</em> authenticated, they are simply not allowed</td></tr>
+<tr><td><code>SCHEDULE_CONFLICT</code></td><td>409</td><td><code>updateWorkingHours</code> — RB-08; carries <code>conflicts</code>, the bookings in the way</td></tr>
 </tbody>
 </table>
 </div>
@@ -244,6 +246,8 @@ the server might return it.</p>
     <td>frontend only, forever</td></tr>
 <tr><td><code>js/mock-data.js</code></td><td>tables, queries, writers, session, persistence</td><td><code>rules</code>, <code>date-utils</code></td>
     <td><b>deleted</b>, replaced by <code>api.js</code></td></tr>
+<tr><td><code>js/admin.js</code> + <code>js/admin/{agenda,services,hours}.js</code></td><td>the dashboard: role guard, then one module per zone</td><td>the shared layer</td>
+    <td>gain <code>await</code>; the three never import each other</td></tr>
 <tr><td><code>js/availability.js</code></td><td>the slot calculator — walks a day in 15-minute steps</td><td><code>rules</code>, <code>date-utils</code></td>
     <td><b>moves to the server</b> in 2.5, unchanged</td></tr>
 <tr><td><code>js/form.js</code></td><td>field-level validation messages inside a &lt;form&gt;</td><td><code>—</code></td>
@@ -309,6 +313,7 @@ writer must <b>refuse</b> it anyway. The rule itself is defined once, in <code>r
 <tr><td>RB-04 · DB guarantees no overlap</td><td>—</td><td>—</td><td><span class="tag t-done">Partea 2</span> composite unique key</td></tr>
 <tr><td>RB-05 · client cancels &gt;24h before</td><td><code>canClientCancel</code></td><td><code>account.js</code> ✓ — button, or a note saying why not</td><td>server-side in 2.5; the mock's cancelBooking does not check, by design</td></tr>
 <tr><td>RB-06 · status transitions</td><td><code>ALLOWED_TRANSITIONS</code></td><td>admin.html (1.5)</td><td><code>setBookingStatus</code> ✓</td></tr>
+<tr><td>RB-08 · a schedule may not strand bookings</td><td><code>bookingFitsHours</code></td><td><code>hours.js</code> lists what blocks the save</td><td><code>updateWorkingHours</code> ✓ — 409, nothing written</td></tr>
 <tr><td>RB-07 · max 3 active per client</td><td><code>MAX_ACTIVE_BOOKINGS</code></td><td>—</td><td><code>addBooking</code> ✓</td></tr>
 </tbody>
 </table>
@@ -327,6 +332,42 @@ reasons: the hour is inside an existing booking, or the hour is free but the ser
 one — a 60-minute service at 09:15 when 10:00 is booked. Both render identically on purpose: "grey means you
 cannot pick it" is one rule a client learns at a glance, where explaining the arithmetic would not help.
 It also means the same day looks different for a 30-minute service than for a 120-minute one.
+</div>
+
+<div class="note">
+<strong>The dashboard uses three different definitions of "which bookings count", on purpose.</strong>
+<em>rezervări active</em> counts pending + confirmed — the two that still hold a slot. <em>Grad de ocupare</em>
+counts everything except cancelled, because a completed appointment did use the chair. <em>Venit realizat</em>
+counts completed only, because that is the money actually earned. They look inconsistent side by side;
+unifying them would break at least one.
+</div>
+
+<div class="note">
+<strong>Revenue on a day the salon is now closed is a real state, not a bug.</strong> RB-08 only protects
+<em>future active</em> bookings, so an admin may close Sundays after the salon has already completed Sunday
+appointments. The revenue tile is then correct and the occupancy tile shows <code>—</code>, because there are
+no opening hours to divide by. Both are right; the pair only looks odd.
+</div>
+
+<div class="note">
+<strong>Occupancy for past days is only as good as the data behind it — and the data has no memory.</strong>
+<code>working_hours</code> stores the schedule as it is <em>now</em>, so "how busy were we on 30 August?"
+cannot be answered once the schedule changes. Inferring the day's span from its own bookings would be
+circular: the denominator would come from the numerator.
+<br><br>
+Doing it properly needs a per-date snapshot rather than a weekly template — the same reasoning that put
+<code>price</code> on the booking row:
+<br><br>
+<code>salon_days</code> — <code>date</code> PK · <code>opens_at</code> · <code>closes_at</code> ·
+<code>staff_count</code>
+<br><br>
+<code>working_hours</code> would stay as the template the admin edits, used to generate future
+<code>salon_days</code> rows; once a date passes its row is history and never changes. That table would also
+make <b>holidays and one-off closures</b> expressible, which a weekly template cannot do at all — it can say
+"closed on Thursdays", never "closed on 25 December".
+<br><br>
+<b>Not built.</b> <code>getOccupancy</code> returns <code>null</code> for a closed day, which is honest: the
+system does not know. A design note for the mentor, and a Partea 2 schema decision.
 </div>
 
 <h2>6. Gaps — all closed</h2>
@@ -411,11 +452,132 @@ became visible once something started passing real input.
 
 <h2>8. Still to build in Partea 1</h2>
 <ul>
-  <li><b>Pages</b>: <s>index</s>, <s>register</s>, <s>login</s>, <s>service</s>, <s>account</s>, admin (1.5).</li>
-  <li><b>The admin agenda needs an <em>Angajat</em> column</b> — the coordinator's mockup predates employees.</li>
-  <li><b>The revenue tile must be relabelled</b> "venit realizat", not "venit estimat".</li>
+  <li><b>Pages</b>: <s>index</s>, <s>register</s>, <s>login</s>, <s>service</s>, <s>account</s>, <s>admin</s>.</li>
 </ul>
+
+<h2>9. Migrating to the real API</h2>
+<p class="lede">What each file costs when <code>mock-data.js</code> is replaced by <code>api.js</code>
+in Partea 3.</p>
+<div class="scroll">
+<table>
+<thead><tr><th>File</th><th>Change</th><th>Effort</th></tr></thead>
+<tbody>
+<tr><td><code>date-utils.js</code></td><td>none — copied to the server as well</td><td><span class="tag t-ok">zero</span></td></tr>
+<tr><td><code>rules.js</code></td><td>none — moves to the server, stays here for UI decisions</td><td><span class="tag t-ok">zero</span></td></tr>
+<tr><td><code>availability.js</code></td><td>none in the file; the PAGE stops calling it and asks <code>GET /api/availability</code> instead</td><td><span class="tag t-ok">zero</span></td></tr>
+<tr><td><code>format.js</code> · <code>form.js</code> · <code>messages.js</code></td><td>none</td><td><span class="tag t-ok">zero</span></td></tr>
+<tr><td><code>mock-data.js</code></td><td><b>deleted.</b> <code>api.js</code> takes its place: one function per endpoint, same names, same shapes, <code>fetch</code> inside</td><td><span class="tag t-warn">~150 lines, new</span></td></tr>
+<tr><td>every page module</td><td>functions become <code>async</code>, calls gain <code>await</code>, each region gains loading and error states (Pas 3.0)</td><td><span class="tag t-warn">the real work</span></td></tr>
+<tr><td><code>layout.js</code></td><td><code>getCurrentUser()</code> → <code>await api.getMe()</code>; the session block disappears with the cookie</td><td><span class="tag t-ok">small</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note">
+<strong>The slot grid gets SIMPLER, not harder.</strong> Today <code>service.js</code> calls
+<code>getWorkingHoursFor</code> + <code>getActiveBookingsForDay</code> + <code>calculateDaySlots</code>.
+In Partea 3 that is one <code>await api.getAvailability(serviceId, employeeId, date)</code> — the server does
+the work, using the same <code>availability.js</code>.
+</div>
+
+<div class="note">
+<strong>A client may hold two bookings at the same time, with different employees. Deliberate.</strong>
+RB-02 is per employee and RB-07 counts bookings rather than overlaps, so nothing prevents it — and nothing
+should. Parallel services are ordinary salon practice: a manicure while hair colour develops is two
+employees and one client at the same hour. The client knows their own schedule; the salon only needs to know
+that each employee is in one place at a time, which is exactly what RB-02 guarantees.
+</div>
+
+<h2>10. Known limits</h2>
+<div class="scroll">
+<table>
+<thead><tr><th>Limit</th><th>Why it is acceptable now</th></tr></thead>
+<tbody>
+<tr><td>Two tabs overwrite each other's writes</td>
+    <td>Persistence saves the whole state blob, so the last tab to write wins. A booking made in
+        another tab can be lost. Partea 2 has one database and real transactions; here it is the
+        cost of a fake one.</td></tr>
+
+<tr><td>A service can be withdrawn while future bookings exist</td>
+    <td>Deliberate: those appointments still happen, and the booking carries its own
+        <code>serviceName</code> and <code>price</code>. Unlike RB-08 for hours, nothing needs to
+        be refused.</td></tr>
+<tr><td>Deactivating an employee is not guarded</td>
+    <td>No screen manages employees yet. When one exists it needs RB-08's treatment: future
+        bookings must be moved first.</td></tr>
+<tr><td>A page left open past midnight drifts</td>
+    <td><code>TODAY</code> is captured when the module loads. Reload after midnight.</td></tr>
+<tr><td>Occupancy for past days assumes the schedule never changed</td>
+    <td>See the <code>salon_days</code> note above.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>11. Demo notes</h2>
+<p class="lede">Reset first — the mock persists everything, so weeks of test data are still there:</p>
+<p><code>localStorage.clear(); location.reload();</code></p>
+<div class="scroll">
+<table>
+<thead><tr><th>Account</th><th>Shows</th></tr></thead>
+<tbody>
+<tr><td><code>maria@mail.com</code> / parola123</td><td>booking successfully; the empty account state</td></tr>
+<tr><td><code>diana@mail.com</code> / parola123</td><td>8 bookings, both pager pages, all four badges, and the RB-07 refusal — she is AT the limit</td></tr>
+<tr><td><code>radu@mail.com</code> / parola123</td><td>one booking short of the limit</td></tr>
+<tr><td><code>admin@aura.ro</code> / admin123</td><td>the dashboard; cannot book, by design</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>12. Which layer enforces what</h2>
+<p class="lede">Every rule sits in exactly one of three places, and the choice is not arbitrary — it
+follows from what each layer is capable of expressing.</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th>Layer</th><th>Rules</th><th>Holds against</th></tr></thead>
+<tbody>
+<tr>
+  <td><b>The database</b><br><span class="muted">Partea 2</span></td>
+  <td><code>UNIQUE(email)</code> · <code>UNIQUE(employee_id, slot_starts_at)</code> ·
+      <code>CHECK (duration_min BETWEEN 15 AND 240)</code> · <code>CHECK (price &gt;= 0)</code> ·
+      <code>CHECK (closes_at &gt; opens_at)</code> · foreign keys</td>
+  <td><b>everything</b>, including direct SQL and a bug in the server</td>
+</tr>
+<tr>
+  <td><b>The server</b><br><span class="muted">rules.js, moved</span></td>
+  <td>RB-02 · RB-03 · RB-05 · RB-06 · RB-07 · RB-08 · "an admin cannot book" · registration and
+      service validation</td>
+  <td>anything arriving through the API — which is every real client</td>
+</tr>
+<tr>
+  <td><b>The page</b></td>
+  <td>which slots are offered, which buttons exist, which fields show a message</td>
+  <td><b>nothing.</b> It is courtesy: it stops mistakes, never attacks</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div class="note">
+<strong>Why a rule cannot always live in the database.</strong> SQL constraints describe one row, or one
+column's uniqueness. RB-08 — "no future active booking may fall outside these hours" — is about
+<em>relationships between rows over time</em>, and no <code>CHECK</code> can express it. Same for RB-07
+(count the client's future bookings) and RB-03 (compare against now). Those need code, and code means the
+server, and the server is reachable only through the API.
+</div>
+
+<div class="note">
+<strong>What that means for direct database access.</strong> A hand-written
+<code>UPDATE employees SET is_active = false</code> bypasses every rule in the middle row — Ana's future
+bookings would be orphaned with no warning, because no code ran. That is normal and accepted: the schema
+still holds (foreign keys, uniqueness, checks), and direct access is a privilege given to people expected to
+know what they are breaking. It is also why <b>the app is safe without an employee guard today</b>: nothing
+in the app can deactivate an employee, so there is no code path to protect. The guard becomes necessary the
+day an admin screen can.
+</div>
 
 </div>
 </body>
 </html>
+
+

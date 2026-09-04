@@ -25,7 +25,14 @@
         <a href="login.html">Autentifică-te</a>.
       </p>
 
-      <section id="account" hidden aria-labelledby="account-title">
+      <!-- Reachable only by typing the URL — the header offers an admin no link here — but an
+         empty list would read as "you have no bookings yet" rather than "not your page". -->
+    <p class="empty-state" id="admin-notice" hidden>
+      Ești autentificat ca administrator. Rezervările sunt pentru conturile de client.
+      <a href="admin.html">Mergi la panoul de administrare</a>.
+    </p>
+
+    <section id="account" hidden aria-labelledby="account-title">
         <h1 id="account-title">Rezervările mele</h1>
         <p class="muted">Poți anula o rezervare cu cel puțin 24 de ore înainte de ora programată.</p>
 

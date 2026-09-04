@@ -10,6 +10,7 @@ import {
     serviceFieldsProblem,
     registrationProblem,
     intervalsOverlap,
+    bookingFitsHours,
 } from './rules.js';
 
 // The instant ↔ local-day conversions live in date-utils.js.
@@ -520,6 +521,47 @@ export function updateWorkingHours(week) {
         }
     });
 
+    // RB-08 — refuse a schedule that would strand bookings the salon has already promised.
+    // Shortening Thursday to 17:00 while a 17:30 appointment exists would leave the salon owing
+    // an appointment it is not open for; closing a day is the same problem, larger. The admin
+    // moves or cancels those first.
+    //
+    // Only FUTURE, ACTIVE bookings count. The past is not negotiable and cannot be honoured
+    // differently now; cancelled and completed ones are nobody's obligation. Note that changing
+    // one weekday affects every future occurrence of it, not just the next one.
+    const now = new Date();
+    const conflicts = [];
+
+    for (const { weekday, opensAt, closesAt } of week) {
+        const proposed = { opensAt: opensAt || null, closesAt: closesAt || null };
+
+        const stranded = bookings.filter(b =>
+            ACTIVE_STATUSES.includes(b.status) &&
+            new Date(b.startsAt) > now &&
+            weekdayOf(toDateKey(b.startsAt)) === Number(weekday) &&
+            !bookingFitsHours(b, proposed));
+
+        conflicts.push(...stranded);
+    }
+
+    if (conflicts.length > 0) {
+        const when = conflicts
+            .slice(0, 3)
+            .map(b => `${toDateKey(b.startsAt)} ${b.startsAt.slice(11, 16)}`)
+            .join(', ');
+
+        const error = new ApiError(
+            'SCHEDULE_CONFLICT',
+            `${conflicts.length} rezervare/rezervări nu ar mai încăpea în programul propus`
+            + ` (${when}${conflicts.length > 3 ? '…' : ''}).`
+            + ' Mută-le sau anulează-le întâi.',
+            409,
+        );
+        // The page lists them so the admin can act; in Partea 2 these travel as error.details.
+        error.conflicts = cloneAll(conflicts);
+        throw error;
+    }
+
     week.forEach(({ weekday, opensAt, closesAt }) => {
         const row = workingHours.find(w => w.weekday === Number(weekday));
         const closed = !opensAt && !closesAt;
@@ -605,9 +647,15 @@ export function getActiveBookingsForDay(dateKey, employeeId) {
 // point of the snapshot: booking 4 was sold at 60 while the price list now says 70, and last
 // month's revenue must still report 60.
 //
-// bookings counts everything EXCEPT cancelled — a cancelled booking released its time, so it is
-// not workload. Note it deliberately does not reuse ACTIVE_STATUSES: that constant answers "does
-// this block a slot?", and completed blocks nothing yet still happened.
+// `active` counts pending + confirmed — ACTIVE_STATUSES, the same two that hold a slot under
+// RB-02. A completed booking is done with; a cancelled one gave its time back. Anything else the
+// dashboard needs is in byStatus, which has all four.
+//
+// Note the dashboard deliberately uses three DIFFERENT definitions, each right for its question:
+//   active   pending + confirmed          still to happen, still holding a slot
+//   occupancy everything but cancelled    a completed appointment did use the chair
+//   revenue  completed only               money actually earned
+// They look inconsistent side by side. Unifying them would break at least one.
 //
 // In Partea 2 this is a handful of aggregate queries, not loops:
 //   SELECT SUM(price) ... WHERE status = 'completed' AND starts_at BETWEEN $1 AND $2
@@ -638,9 +686,42 @@ export function getStats(from = todayKey(), to = from) {
         from,
         to,
         revenue: completed.reduce((total, b) => total + b.price, 0),
-        bookings: inRange.filter(b => b.status !== 'cancelled').length,
+        active: inRange.filter(b => ACTIVE_STATUSES.includes(b.status)).length,
         byStatus,
         topServices,
+    };
+}
+
+// Grad de ocupare for one day — the share of the salon's capacity that is spoken for.
+//
+//   capacity = (closing − opening) × active employees
+//   booked   = the minutes of that day's non-cancelled bookings
+//
+// Returns null on a closed day rather than 0. Zero would read as catastrophic failure; the
+// honest answer for a Sunday is "—", and the page renders a dash.
+//
+// Two decisions worth knowing. The denominator counts EVERY active employee, including any who
+// had no bookings — idle capacity is real, and hiding it would flatter the number. And it uses
+// who is active NOW, so a past day's figure shifts if someone leaves; a real system would
+// snapshot staffing per day, which is more machinery than this needs.
+export function getOccupancy(dateKey = todayKey()) {
+    const hours = getWorkingHoursFor(weekdayOf(dateKey));
+    if (!hours?.opensAt || !hours.closesAt) return null;
+
+    const openMinutes = minutesFromTime(hours.closesAt) - minutesFromTime(hours.opensAt);
+    const staff = employees.filter(e => e.isActive).length;
+    const capacityMinutes = openMinutes * staff;
+
+    // Not ACTIVE_STATUSES: completed bookings occupied their time too. Only cancelled ones
+    // gave it back.
+    const bookedMinutes = bookings
+        .filter(b => toDateKey(b.startsAt) === dateKey && b.status !== 'cancelled')
+        .reduce((total, b) => total + (new Date(b.endsAt) - new Date(b.startsAt)) / 60000, 0);
+
+    return {
+        bookedMinutes,
+        capacityMinutes,
+        rate: capacityMinutes === 0 ? 0 : bookedMinutes / capacityMinutes,
     };
 }
 
@@ -710,6 +791,17 @@ export function addBooking({ userId, serviceId, employeeId, startsAt }) {
     // POST /api/bookings is auth `C` — no session, no booking. Without this the next line
     // would read .fullName off null and crash instead of failing the way the API fails.
     if (!user) throw new ApiError('UNAUTHENTICATED', 'Trebuie să fii autentificat.', 401);
+
+    // An admin account cannot book. A booking made by the salon itself would sit in the agenda
+    // as a client appointment, count towards that account's RB-07 limit and land in the revenue
+    // figures. 403 rather than 401: they ARE authenticated, they are simply not allowed.
+    if (user.role === 'admin') {
+        throw new ApiError(
+            'ADMIN_CANNOT_BOOK',
+            'Un cont de administrator nu poate face rezervări. Autentifică-te cu un cont de client.',
+            403,
+        );
+    }
 
     // The employee must exist and still work here. An inactive one is a 404 rather than a 422:
     // from the client's point of view someone who left the salon is simply not there.
@@ -886,7 +978,7 @@ function normalizeService(data) {
     // message, and the CHECK constraint refuses the row whatever the server believes. Here the
     // mock plays both parts, because there is no database yet.
     const problem = serviceFieldsProblem(out);
-    if (problem) throw new ApiError('INVALID_SERVICE', problem, 422);
+    if (problem) throw new ApiError('INVALID_SERVICE', problem.message, 422);
 
     return out;
 }

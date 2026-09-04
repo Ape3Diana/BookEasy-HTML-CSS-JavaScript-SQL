@@ -86,6 +86,12 @@
                   <a class="btn btn--primary" id="confirm-login" href="login.html" hidden>
                       Autentifică-te ca să rezervi
                   </a>
+
+                  <!-- an admin account has admin duties only; addBooking refuses it with
+                       ADMIN_CANNOT_BOOK (403) even if this note is bypassed -->
+                  <p class="muted" id="confirm-admin" hidden>
+                      Ești autentificat ca administrator — conturile de admin nu fac rezervări.
+                  </p>
               </div>
 
           </div>

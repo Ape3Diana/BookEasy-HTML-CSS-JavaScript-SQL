@@ -25,3 +25,21 @@ export function clearMessage(node) {
 export function clearMessages(...nodes) {
     nodes.forEach(clearMessage);
 }
+
+// Most pages have exactly one error slot and one success slot, and the rule is always the same:
+// showing either hides the other. A red "slot taken" left sitting above a green "booking made"
+// is worse than no message at all.
+//
+// Five pages were each writing that rule out again. Now they write:
+//
+//   const msg = messagePair(el.error, el.success);
+//   msg.error('…');  msg.success('…');  msg.clear();
+export function messagePair(errorNode, successNode) {
+    const clear = () => clearMessages(errorNode, successNode);
+
+    return {
+        clear,
+        error(text) { clear(); showMessage(errorNode, text); },
+        success(text) { clear(); showMessage(successNode, text); },
+    };
+}
