@@ -5,11 +5,12 @@ import { canClientCancel } from './rules.js';
 import { toDateKey } from './date-utils.js';
 import { formatPrice, formatTime, formatLongDate, statusLabel } from './format.js';
 import { initLayout, SESSION_CHANGED } from './layout.js';
-import { showMessage, clearMessages } from './messages.js';
+import { messagePair } from './messages.js';
 
 const el = {
     authRequired: document.querySelector('#auth-required'),
     account:      document.querySelector('#account'),
+    adminNotice:  document.querySelector('#admin-notice'),
 
     list:  document.querySelector('#bookings-list'),
     empty: document.querySelector('#bookings-empty'),
@@ -31,13 +32,7 @@ let page = 1;
 
 // ── Messages ─────────────────────────────────────────────────────────────────
 
-// Error and success share a slot in the user's attention: showing one always hides the other.
-const clearBoth = () => clearMessages(el.error, el.success);
-
-function announce(node, message) {
-    clearBoth();
-    showMessage(node, message);
-}
+const msg = messagePair(el.error, el.success);
 
 
 // ── One row ──────────────────────────────────────────────────────────────────
@@ -124,23 +119,23 @@ el.list.addEventListener('click', event => {
 
     try {
         cancelBooking(Number(button.dataset.cancel));   // returns nothing — 204 No Content
-        announce(el.success, 'Rezervarea a fost anulată.');
+        msg.success( 'Rezervarea a fost anulată.');
         render();                                        // re-read, do not patch the row by hand
     } catch (err) {
-        announce(el.error, err.message ?? 'Nu am putut anula rezervarea.');
+        msg.error( err.message ?? 'Nu am putut anula rezervarea.');
     }
 });
 
 el.prev.addEventListener('click', () => {
     if (page <= 1) return;
     page -= 1;
-    clearBoth();
+    msg.clear();
     render();
 });
 
 el.next.addEventListener('click', () => {
     page += 1;
-    clearBoth();
+    msg.clear();
     render();
 });
 
@@ -151,19 +146,35 @@ el.next.addEventListener('click', () => {
 // the "please log in" message instead of leaving one person's bookings on screen for nobody.
 function showForCurrentUser() {
     user = getCurrentUser();
-    clearBoth();
+    msg.clear();
 
     // A visitor sees this instead of an empty list — "no bookings" and "not logged in" are
     // different things. The real guard is the server's 401 in Partea 3; this is courtesy.
     const isVisitor = user === null;
-    el.authRequired.hidden = !isVisitor;
-    el.account.hidden = isVisitor;
+    const isAdmin = user?.role === 'admin';
 
-    if (user) {
+    // Reachable only by typing the URL — the header offers no link to an admin — but an empty
+    // list would suggest "you have no bookings yet" rather than "this page is not for you".
+    el.adminNotice.hidden = !isAdmin;
+    el.authRequired.hidden = !isVisitor;
+    el.account.hidden = isVisitor || isAdmin;
+
+    if (user && !isAdmin) {
         page = 1;               // a different account has different pages
         render();
     }
 }
+
+// A booking made in another tab will not announce itself — the mock has no push, and neither
+// will the API. Redrawing when this tab regains focus covers the case that actually happens:
+// book on service.html in one tab, switch back to "Contul meu" in another.
+//
+// Only when logged in and not an admin: for anyone else there is no list to redraw.
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!user || user.role === 'admin') return;
+    render();
+});
 
 initLayout();
 document.addEventListener(SESSION_CHANGED, showForCurrentUser);

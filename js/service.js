@@ -18,7 +18,7 @@ import {
     formatPrice, formatDuration, formatTime, formatShortDate, formatLongDate, weekdayShort,
 } from './format.js';
 import { initLayout, SESSION_CHANGED } from './layout.js';
-import { showMessage, clearMessages } from './messages.js';
+import { messagePair } from './messages.js';
 
 const DAYS_SHOWN = 14;
 
@@ -45,6 +45,7 @@ const el = {
     summary:     document.querySelector('#confirm-summary'),
     confirmBtn:  document.querySelector('#confirm-button'),
     confirmLogin:document.querySelector('#confirm-login'),
+    confirmAdmin:document.querySelector('#confirm-admin'),
 };
 
 const tpl = {
@@ -174,12 +175,19 @@ function renderConfirm() {
         `${service.name} · ${formatLongDate(state.dateKey)} · `
         + `${formatTime(state.startsAt)}–${formatTime(endsAt)} · ${formatPrice(service.price)}`;
 
-    // Decided BEFORE the click, so a visitor is told up front rather than after choosing an
-    // hour. addBooking still throws UNAUTHENTICATED if anyone gets past this — the guard is the
-    // writer's, this is only courtesy.
-    const isVisitor = getCurrentUser() === null;
-    el.confirmBtn.hidden = isVisitor;
+    // Three cases, decided BEFORE the click so nobody picks an hour they cannot have:
+    //   client   → the confirm button
+    //   visitor  → a link to log in
+    //   admin    → a note; an admin account has admin duties only and cannot book
+    // addBooking refuses the last two anyway (UNAUTHENTICATED / ADMIN_CANNOT_BOOK). This is
+    // courtesy; the writer is the guard.
+    const user = getCurrentUser();
+    const isVisitor = user === null;
+    const isAdmin = user?.role === 'admin';
+
+    el.confirmBtn.hidden = isVisitor || isAdmin;
     el.confirmLogin.hidden = !isVisitor;
+    el.confirmAdmin.hidden = !isAdmin;
 
     el.panel.hidden = false;
 }
@@ -194,18 +202,7 @@ function render() {
 
 // ── Messages ─────────────────────────────────────────────────────────────────
 
-// Error and success share a slot in the user's attention: showing one always hides the other.
-const clearBoth = () => clearMessages(el.error, el.success);
-
-function showError(message) {
-    clearBoth();
-    showMessage(el.error, message);
-}
-
-function showSuccess(message) {
-    clearBoth();
-    showMessage(el.success, message);
-}
+const msg = messagePair(el.error, el.success);
 
 
 // ── Reacting ─────────────────────────────────────────────────────────────────
@@ -219,7 +216,7 @@ el.employees.addEventListener('click', event => {
 
     state.employeeId = Number(chip.dataset.employee);
     state.startsAt = null;      // that hour may be busy for the new person
-    clearBoth();
+    msg.clear();
     render();
 });
 
@@ -229,7 +226,7 @@ el.days.addEventListener('click', event => {
 
     state.dateKey = button.dataset.day;
     state.startsAt = null;      // the chosen hour belonged to the previous day
-    clearBoth();
+    msg.clear();
     render();
 });
 
@@ -238,7 +235,7 @@ el.slots.addEventListener('click', event => {
     if (!button) return;
 
     state.startsAt = button.dataset.slot;
-    clearBoth();
+    msg.clear();
     render();
 });
 
@@ -254,13 +251,13 @@ el.confirmBtn.addEventListener('click', () => {
             startsAt: state.startsAt,
         });
 
-        showSuccess('Rezervare înregistrată. O găsești în Contul meu, în așteptarea confirmării.');
+        msg.success('Rezervare înregistrată. O găsești în Contul meu, în așteptarea confirmării.');
 
         state.startsAt = null;  // the slot is gone from the grid now — nothing stays selected
         render();
 
     } catch (err) {
-        showError(err.message ?? 'Nu am putut face rezervarea. Încearcă din nou.');
+        msg.error(err.message ?? 'Nu am putut face rezervarea. Încearcă din nou.');
 
         // SLOT_TAKEN means someone booked it between the grid being drawn and the click. The
         // message alone would leave a stale grid on screen, so redraw it — the same handling

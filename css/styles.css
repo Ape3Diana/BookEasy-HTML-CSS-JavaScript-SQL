@@ -657,3 +657,238 @@ section > .muted {
     font-size: 14px;
 }
 
+
+
+/* ADMIN */
+
+.zone { margin-bottom: var(--space-6); }
+
+.zone h1 { font-size: 24px; }
+.zone h2 { font-size: 20px; }
+.zone h1, .zone h2 { margin-bottom: var(--space-1); }
+.zone > .muted { margin-bottom: var(--space-4); }
+
+
+/* ── Filters ───────────────────────────────────────────────────────────────── */
+
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.filters label {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.filters input,
+.filters select {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    padding: 7px 10px;
+}
+
+
+/* ── Stat tiles ────────────────────────────────────────────────────────────── */
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.stat {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: var(--space-3);
+}
+
+.stat b {
+    display: block;
+    font-size: 22px;
+    line-height: 1.2;
+}
+
+.stat span {
+    color: var(--ink-soft);
+    font-size: 12.5px;
+}
+
+
+/* ── Tables ────────────────────────────────────────────────────────────────── */
+
+/* Six columns will not fit a phone, so the TABLE scrolls inside this box rather than the page
+   growing sideways. min-width on the table is what forces the overflow instead of letting the
+   columns crush together. */
+.table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    margin-bottom: var(--space-3);
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 680px;
+    background: var(--surface);
+}
+
+th {
+    text-align: left;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: .7px;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    background: var(--bg);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+
+td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line);
+    font-size: 14px;
+    vertical-align: middle;
+}
+
+tr:last-child td { border-bottom: 0; }
+
+/* the client cell stacks a name over an email */
+td small { display: block; font-size: 12.5px; }
+
+/* NOT display: flex. A <td> with display:flex stops being a table cell — it leaves the row's
+   layout, so its height and its bottom border no longer line up with the cells beside it.
+   The buttons are inline-block already, so they sit in a row and wrap on their own; they just
+   need spacing between them. */
+.row-actions .btn {
+    padding: 4px 10px;
+    font-size: 12.5px;
+    margin-block: 2px;              /* breathing room when two buttons wrap onto two lines */
+}
+
+.row-actions .btn + .btn {
+    margin-left: var(--space-1);    /* between buttons only, never after the last */
+}
+
+
+/* ── Badges that are not booking statuses ──────────────────────────────────── */
+/* The services table needs a green/red pill for "Activ: Da / Nu". Those are not statuses, so
+   data-status would be nonsense — they get plain variants instead. The booking badges then read
+   as "confirmed LOOKS LIKE ok", which is a decision that could change on its own. */
+
+.badge--ok  { background: var(--ok-bg);  color: var(--ok);  }
+.badge--bad { background: var(--bad-bg); color: var(--bad); }
+
+
+/* ── The service form ──────────────────────────────────────────────────────── */
+
+/* .panel centres a login box; inline it sits in the flow at full width instead */
+.panel--inline {
+    max-width: none;
+    margin-inline: 0;
+}
+
+.panel--inline h3 {
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: var(--space-3);
+}
+
+/* the four fields sit side by side when there is room, and stack when there is not */
+.panel--inline .field {
+    display: inline-block;
+    width: min(100%, 220px);
+    margin-right: var(--space-3);
+    vertical-align: top;
+}
+
+.form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+}
+
+.form-actions .btn--primary { width: auto; padding: 8px 20px; }
+
+
+/* ── The working-hours editor ──────────────────────────────────────────────── */
+
+.hours-editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+}
+
+.hours-editor__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+}
+
+/* fixed width so the seven day names line up and the time inputs form a column */
+.hours-editor__day {
+    min-width: 92px;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.hours-editor input[type="time"] {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    padding: 5px 8px;
+}
+
+.hours-editor input[type="time"]:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+
+.hours-editor__closed {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: 14px;
+    color: var(--ink-soft);
+    margin-left: auto;          /* pushes the checkbox to the right edge of the row */
+}
+
+
+/* ── Bookings blocking a schedule change (RB-08) ───────────────────────────── */
+
+.conflicts {
+    list-style: none;
+    margin: 0 0 var(--space-3);
+    padding: var(--space-2) var(--space-3);
+
+    background: var(--bad-bg);
+    border-radius: var(--radius-sm);
+    color: var(--bad);
+    font-size: 13.5px;
+}
+
+.conflicts li { margin: 2px 0; }

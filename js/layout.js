@@ -11,9 +11,19 @@ import { weekdayName, formatWorkingHours, WEEK_ORDER } from './format.js';
 // and every region that shows private data has to redraw.
 export const SESSION_CHANGED = 'bookeasy:session-changed';
 
+// Fired when the admin saves a new weekly schedule. The footer programme shows those hours, and
+// the agenda's occupancy tile divides by them, so both go stale the moment they change.
+//
+// Two events is still comfortably a pair of constants; if a third appears, move all of them to
+// their own js/events.js rather than letting layout.js become the place events live.
+export const HOURS_CHANGED = 'bookeasy:hours-changed';
+
 export function initLayout({ showAuthLinks = true } = {}) {
     renderHeader({ showAuthLinks });
     renderFooterHours();
+
+    // The footer keeps itself current. The admin page does not have to remember to tell it.
+    document.addEventListener(HOURS_CHANGED, renderFooterHours);
 }
 
 function renderFooterHours() {
@@ -65,7 +75,12 @@ function renderHeader({ showAuthLinks = true } = {}) {
             nodes.push(link('Panou admin', 'admin.html', 'btn btn--ghost'));
         }
 
-        nodes.push(link('Contul meu', 'account.html', 'btn btn--ghost'));
+        // An admin account has admin duties only — it never books anything, so it has no
+        // bookings to look at. Offering "Contul meu" would lead to a page that is empty by
+        // definition.
+        if (user.role !== 'admin') {
+            nodes.push(link('Contul meu', 'account.html', 'btn btn--ghost'));
+        }
 
         const out = document.createElement('button');
         out.className = 'btn';

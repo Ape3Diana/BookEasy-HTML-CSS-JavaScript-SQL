@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a class="logo" href="index.html">BookEasy<span>Panou administrare</span></a>
+
+      <nav class="nav" id="site-nav" aria-label="Cont">
+        <a class="btn btn--ghost" href="index.html">← Înapoi la site</a>
+        <span class="nav__auth" id="auth-nav"></span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <p class="empty-state" id="access-denied" hidden>
+      Acces interzis. Această pagină este doar pentru administratori.
+      <a href="index.html">Înapoi la servicii</a>.
+    </p>
+
+    <div id="admin" hidden>
+
+      <!-- ═══ ZONE 1 · the day's agenda ═══ owned by js/admin/agenda.js ═══════════════ -->
+      <section class="zone" aria-labelledby="agenda-title">
+        <h1 id="agenda-title">Agenda zilei</h1>
+        <p class="muted">Confirmă, anulează sau marchează finalizate rezervările zilei alese.</p>
+
+        <div class="filters">
+          <label for="filter-date">Ziua</label>
+          <input type="date" id="filter-date">
+
+          <label for="filter-status">Status</label>
+          <select id="filter-status">
+            <option value="">Toate</option>
+            <option value="pending">În așteptare</option>
+            <option value="confirmed">Confirmate</option>
+            <option value="completed">Finalizate</option>
+            <option value="cancelled">Anulate</option>
+          </select>
+
+          <label for="filter-employee">Angajat</label>
+          <select id="filter-employee">
+            <option value="">Toți</option>
+          </select>
+        </div>
+
+        <!-- the four tiles describe the SELECTED day, so they redraw with the agenda -->
+        <div class="stats" id="agenda-stats">
+          <!-- "active": the table can show more rows than this, because it also lists cancelled
+               bookings and those gave their time back -->
+          <div class="stat"><b class="num" id="stat-bookings">—</b><span>rezervări active</span></div>
+          <div class="stat"><b class="num" id="stat-pending">—</b><span>în așteptare</span></div>
+          <div class="stat"><b class="num" id="stat-revenue">—</b><span>venit realizat</span></div>
+          <div class="stat"><b class="num" id="stat-occupancy">—</b><span>grad de ocupare</span></div>
+        </div>
+
+        <p class="form-error"   id="agenda-error"   role="alert"  hidden></p>
+        <p class="form-success" id="agenda-success" role="status" hidden></p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+            <tr>
+              <th>Ora</th>
+              <th>Client</th>
+              <th>Serviciu</th>
+              <th>Angajat</th>
+              <th>Status</th>
+              <th>Acțiuni</th>
+            </tr>
+            </thead>
+            <tbody id="agenda-rows"></tbody>
+          </table>
+        </div>
+
+        <p class="empty-state" id="agenda-empty" hidden>
+          Nicio rezervare care să corespundă filtrelor.
+        </p>
+      </section>
+
+
+      <!-- ═══ ZONE 2 · services ═══ owned by js/admin/services.js ════════════════════ -->
+      <section class="zone" aria-labelledby="services-title">
+        <h2 id="services-title">Servicii</h2>
+        <p class="muted">Serviciile dezactivate rămân în istoric — nu se șterg niciodată.</p>
+
+        <p class="form-error"   id="services-error"   role="alert"  hidden></p>
+        <p class="form-success" id="services-success" role="status" hidden></p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+            <tr>
+              <th>Serviciu</th>
+              <th>Durată</th>
+              <th>Preț</th>
+              <th>Activ</th>
+              <th>Acțiuni</th>
+            </tr>
+            </thead>
+            <tbody id="services-rows"></tbody>
+          </table>
+        </div>
+
+        <!-- One form for both adding and editing. Editing fills it in and sets data-editing to
+             the id; saving decides between addService and updateService from that. -->
+        <form class="panel panel--inline" id="service-form" novalidate>
+          <h3 id="service-form-title">Adaugă un serviciu</h3>
+
+          <div class="field">
+            <label for="service-name">Nume</label>
+            <input id="service-name" name="name" type="text" required>
+            <p class="field__error" data-error-for="name" hidden></p>
+          </div>
+
+          <div class="field">
+            <label for="service-description">Descriere</label>
+            <input id="service-description" name="description" type="text">
+          </div>
+
+          <div class="field">
+            <label for="service-duration">Durată (minute)</label>
+            <input id="service-duration" name="durationMin" type="number" min="15" max="240" step="15" required>
+            <p class="hint">Între 15 și 240, multiplu de 15.</p>
+            <p class="field__error" data-error-for="durationMin" hidden></p>
+          </div>
+
+          <div class="field">
+            <label for="service-price">Preț (lei)</label>
+            <input id="service-price" name="price" type="number" min="0" step="1" required>
+            <p class="field__error" data-error-for="price" hidden></p>
+          </div>
+
+          <p class="form-error" id="service-form-error" role="alert" hidden></p>
+
+          <div class="form-actions">
+            <button class="btn btn--primary" type="submit" id="service-save">Adaugă</button>
+            <button class="btn" type="button" id="service-cancel" hidden>Renunță</button>
+          </div>
+        </form>
+      </section>
+
+
+      <!-- ═══ ZONE 3 · working hours ═══ owned by js/admin/hours.js ══════════════════ -->
+      <section class="zone" aria-labelledby="hours-title">
+        <h2 id="hours-title">Programul de lucru</h2>
+        <p class="muted">
+          Programul nu poate fi restrâns peste rezervări deja făcute — mută-le sau anulează-le întâi.
+        </p>
+
+        <p class="form-error"   id="hours-error"   role="alert"  hidden></p>
+        <p class="form-success" id="hours-success" role="status" hidden></p>
+
+        <!-- PUT /api/admin/working-hours replaces the WHOLE week, so this is one form with one
+             save, not seven independent rows. -->
+        <form id="hours-form" novalidate>
+          <div class="hours-editor" id="hours-rows"></div>
+
+          <!-- bookings that block a refused change get listed here, so the admin can go and
+               move them rather than guessing which ones are in the way -->
+          <ul class="conflicts" id="hours-conflicts" hidden></ul>
+
+          <div class="form-actions">
+            <button class="btn btn--primary" type="submit">Salvează programul</button>
+            <button class="btn" type="button" id="hours-reset">Anulează modificările</button>
+          </div>
+        </form>
+      </section>
+
+    </div>
+  </main>
+
+<footer class="site-footer">
+  <div class="container site-footer__inner">
+    <div>
+      <strong>Aura Beauty Studio</strong>
+      <p class="muted">Panou administrare</p>
+    </div>
+    <div>
+      <h2 class="site-footer__title">Program</h2>
+      <dl class="hours" id="working-hours"></dl>
+    </div>
+  </div>
+</footer>
+
+
+<!-- ═══ repeated shapes, one per zone ═══════════════════════════════════════════ -->
+
+<template id="agenda-row">
+  <tr>
+    <td class="num" data-time></td>
+    <td>
+      <span data-client></span>
+      <small class="muted" data-email></small>
+    </td>
+    <td data-service></td>
+    <td data-employee></td>
+    <td><span class="badge" data-status></span></td>
+    <!-- buttons are added by agenda.js, one per allowed RB-06 transition; a completed or
+         cancelled booking gets none, because both are terminal -->
+    <td class="row-actions" data-actions></td>
+  </tr>
+</template>
+
+<template id="service-row">
+  <tr>
+    <td data-name></td>
+    <td class="num" data-duration></td>
+    <td class="num" data-price></td>
+    <td><span class="badge" data-active></span></td>
+    <td class="row-actions">
+      <button class="btn" type="button" data-edit>Editează</button>
+      <button class="btn btn--danger" type="button" data-toggle-active></button>
+    </td>
+  </tr>
+</template>
+
+<template id="hours-row">
+  <div class="hours-editor__row">
+    <span class="hours-editor__day" data-weekday></span>
+    <input type="time" step="900" data-opens>
+    <span class="muted">–</span>
+    <input type="time" step="900" data-closes>
+    <label class="hours-editor__closed">
+      <input type="checkbox" data-closed> Închis
+    </label>
+  </div>
+</template>
+
+<script type="module" src="js/admin.js"></script>
+</body>
+</html>
