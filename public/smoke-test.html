@@ -305,11 +305,30 @@ check('a valid update applies', () => {
     updateWorkingHours([{ weekday: 2, opensAt: '09:00', closesAt: '18:00' }]);   // restore
     return ok;
 });
-check('a day can be closed with nulls', () => {
-    updateWorkingHours([{ weekday: 3, opensAt: null, closesAt: null }]);
-    const ok = getWorkingHoursFor(3).opensAt === null;
-    updateWorkingHours([{ weekday: 3, opensAt: '09:00', closesAt: '18:00' }]);   // restore
-    return ok;
+// RB-08 refuses closing a weekday that has future bookings, and the seed puts them on several.
+// Find one that is genuinely free rather than assuming — the same lesson as every other date
+// fixture in this file: ask the data, do not guess.
+const busyWeekdays = new Set();
+for (let i = 0; i <= 30; i++) {
+    const key = addDays(todayKey(), i);
+    if (getBookingsForDay(key).some(b => b.status === 'pending' || b.status === 'confirmed')) {
+        busyWeekdays.add(weekdayOf(key));
+    }
+}
+const freeWeekday = [1, 2, 3, 4, 5, 6]
+    .find(d => !busyWeekdays.has(d) && getWorkingHoursFor(d)?.opensAt);
+
+check('a day with no bookings can be closed, and reopened', () => {
+    if (freeWeekday === undefined) return true;        // nothing to prove with today's seed
+    const before = getWorkingHoursFor(freeWeekday);
+
+    updateWorkingHours([{ weekday: freeWeekday, opensAt: null, closesAt: null }]);
+    const closed = getWorkingHoursFor(freeWeekday).opensAt === null;
+
+    updateWorkingHours([{ weekday: freeWeekday, opensAt: before.opensAt, closesAt: before.closesAt }]);
+    const reopened = getWorkingHoursFor(freeWeekday).opensAt === before.opensAt;
+
+    return closed && reopened;
 });
 
 // ──────────────────────────────────────────── RB-08 · schedule vs bookings
@@ -354,18 +373,6 @@ check('a change that still fits them is accepted', () => {
     updateWorkingHours([{ weekday: seedWeekday, opensAt: '08:00', closesAt: '21:00' }]);
     const ok = getWorkingHoursFor(seedWeekday).opensAt === '08:00';
     updateWorkingHours([{ weekday: seedWeekday, ...before }]);      // restore
-    return ok;
-});
-check('a day with no bookings can be closed freely', () => {
-    // find a weekday the seed never books
-    const busy = new Set([weekdayOf(SEED_DAY)]);
-    const free = [1, 2, 3, 4, 5].find(d => !busy.has(d)
-        && getBookingsForDay(addDays(todayKey(), (d - weekdayOf(todayKey()) + 7) % 7 || 7)).length === 0);
-    if (free === undefined) return true;                            // nothing to prove today
-    const before = getWorkingHoursFor(free);
-    updateWorkingHours([{ weekday: free, opensAt: null, closesAt: null }]);
-    const ok = getWorkingHoursFor(free).opensAt === null;
-    updateWorkingHours([{ weekday: free, ...before }]);             // restore
     return ok;
 });
 
