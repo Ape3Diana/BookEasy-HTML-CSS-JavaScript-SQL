@@ -23,6 +23,7 @@ import {
     plusMinutes,
     minutesOfDay,
     minutesFromTime,
+    timeFromMinutes,
 } from './date-utils.js';
 
 
@@ -545,9 +546,12 @@ export function updateWorkingHours(week) {
     }
 
     if (conflicts.length > 0) {
+        // Local time, not a slice of the ISO string — that would print UTC, so a 15:00
+        // appointment would be reported as "12:00" and the admin would go looking for a
+        // booking that does not exist.
         const when = conflicts
             .slice(0, 3)
-            .map(b => `${toDateKey(b.startsAt)} ${b.startsAt.slice(11, 16)}`)
+            .map(b => `${toDateKey(b.startsAt)} ${timeFromMinutes(minutesOfDay(b.startsAt))}`)
             .join(', ');
 
         const error = new ApiError(

@@ -1,0 +1,17 @@
+{
+  "name": "bookeasy",
+  "version": "1.0.0",
+  "description": "Aplicație de rezervări pentru Aura Beauty Studio — training fullstack",
+  "type": "module",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "db:reset": "psql -d bookeasy -f db/schema.sql && psql -d bookeasy -f db/seed.sql",
+    "start:express": "node server/server-express.js",
+    "dev": "node --watch server/server.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
